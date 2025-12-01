@@ -17,25 +17,41 @@ export const OrderTracking = ({ order, setPage, user }) => {
   useEffect(() => {
     let mounted = true;
     const attachImagesToItems = async () => {
-      const items = currentOrder.order_items || [];
+      const items = (order?.order_items) || (currentOrder.order_items) || [];
       if (!items.length) return;
 
       const bucketsToTry = ['food-images', 'restaurant-images'];
 
       const updated = await Promise.all(items.map(async (i) => {
-        // preserve existing image_url if already attached
-        if (i.image_url) return i;
-        const raw = i.food_items?.image_url || i.image_url || null;
+        // already resolved
+        if (i.image_url && typeof i.image_url === 'string' && i.image_url.length) return i;
+
+        // try several possible fields/shapes for image references
+        let raw = i.food_items?.image_url ?? i.image_url ?? i.image ?? i.food_items?.image ?? null;
         if (!raw) return i;
 
-        if (raw.startsWith && raw.startsWith('http')) return { ...i, image_url: raw };
+        // If it's an object with common keys, extract the string path/url
+        if (typeof raw === 'object') {
+          raw = raw.url || raw.path || raw.publicUrl || raw.public_url || raw.publicURL || null;
+        }
+
+        if (!raw) return i;
+        raw = String(raw).trim();
+
+        // If it's already a full URL or data URI, use it directly
+        if (/^https?:\/\//i.test(raw) || raw.startsWith('data:')) return { ...i, image_url: raw };
+
+        // Normalize path (remove leading slashes)
+        raw = raw.replace(/^\/+/, '');
 
         for (const bucket of bucketsToTry) {
           try {
             const { data } = supabase.storage.from(bucket).getPublicUrl(raw);
-            if (data?.publicUrl) return { ...i, image_url: data.publicUrl };
+            // supabase client may return different casing, accept common variations
+            const publicUrl = data?.publicUrl || data?.publicURL || data?.public_url || data?.url;
+            if (publicUrl) return { ...i, image_url: publicUrl };
           } catch (e) {
-            // ignore and try next bucket
+            // try next bucket
           }
         }
 
@@ -43,13 +59,20 @@ export const OrderTracking = ({ order, setPage, user }) => {
       }));
 
       if (mounted) {
-        setCurrentOrder(prev => ({ ...prev, order_items: updated }));
+        setCurrentOrder(prev => {
+          const prevItems = prev?.order_items || [];
+          // avoid unnecessary state updates
+          try {
+            if (JSON.stringify(prevItems) === JSON.stringify(updated)) return prev;
+          } catch (e) {}
+          return { ...prev, order_items: updated };
+        });
       }
     };
 
     attachImagesToItems();
     return () => { mounted = false; };
-  }, [order]);
+  }, [order, currentOrder.order_items]);
   
   // Logic helpers
   const isCompleted = currentOrder.status === 'Delivered' || currentOrder.status === 'Completed';

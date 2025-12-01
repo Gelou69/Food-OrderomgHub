@@ -1,33 +1,32 @@
-// components/owner/RestaurantOwnerDashboard.jsx - FINAL FIXED VERSION
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+// components/owner/RestaurantOwnerDashboard.jsx - FINAL CREATIVE VERSION
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { supabase } from '../../config/supabase';
 
 // --- CONSTANTS ---
 const ORANGE = '#FF8A00'; 
-const NAVY = '#003366'; 
+const NAVY = '#003366';
 const LIGHT_BG = '#F7F7F7'; 
 const GRAY_TEXT = '#6B7280'; 
 const BORDER = '#D1D5DB';
-
-// FIXED: Added 'Driver Assigned' to the list
 const ORDER_STATUSES = ['Pending', 'Preparing', 'Driver Assigned', 'Out for Delivery', 'Delivered', 'Completed', 'Cancelled'];
+const STATUS_FILTER_KEY = 'restaurantOwnerStatusFilter';
 
-// FIXED: Key used to save your filter selection in the browser
-const STATUS_FILTER_KEY = 'restaurantOwnerStatusFilter'; 
+// --- UTILITY COMPONENTS ---
 
 const StyledInput = (props) => (
     <input 
-        className="w-full p-3 border rounded-lg bg-gray-50 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+        className="w-full p-3 border rounded-lg bg-gray-50 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-shadow" 
         style={{ borderColor: BORDER }}
         {...props} 
     />
 );
 
+// ENHANCED: Added active state for a better feel
 const FoodButton = ({ children, onClick, disabled }) => (
     <button
         onClick={onClick}
         disabled={disabled}
-        className="w-full py-3 text-white rounded-lg font-bold transition duration-150 ease-in-out shadow-lg disabled:bg-gray-400 disabled:cursor-not-allowed"
+        className="w-full py-3 text-white rounded-lg font-bold transition duration-150 ease-in-out shadow-lg disabled:bg-gray-400 disabled:cursor-not-allowed transform active:scale-[0.99] active:shadow-sm" // Creative active state
         style={!disabled ? { backgroundColor: ORANGE } : {}}
     >
         {children}
@@ -36,13 +35,12 @@ const FoodButton = ({ children, onClick, disabled }) => (
 
 const Loading = () => (
     <div className="flex justify-center items-center min-h-screen">
-        <p className="text-lg font-semibold" style={{ color: NAVY }}>Loading...</p>
+        <p className="text-lg font-semibold animate-pulse" style={{ color: NAVY }}>Loading...</p>
     </div>
 );
 
-// ------------------------------------------------------------------
-// --- OWNER AUTHENTICATION COMPONENT ---
-// ------------------------------------------------------------------
+// --- AUTHENTICATION/REGISTRATION COMPONENT ---
+
 const OwnerAuthPage = ({ onSuccess }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -119,7 +117,6 @@ const OwnerAuthPage = ({ onSuccess }) => {
                     
                     let retries = 3;
                     let restaurantCreated = false;
-                    
                     while (retries > 0 && !restaurantCreated) {
                         const { error: dbError } = await supabase
                             .from('restaurants')
@@ -188,7 +185,8 @@ const OwnerAuthPage = ({ onSuccess }) => {
                             </div>
                             <div>
                                 <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Restaurant Name</label>
-                                <StyledInput type="text" placeholder="e.g., Jollibee Tubod" value={restaurantName} onChange={(e) => setRestaurantName(e.target.value)} />
+                                <StyledInput 
+                                    type="text" placeholder="e.g., Jollibee Tubod" value={restaurantName} onChange={(e) => setRestaurantName(e.target.value)} />
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                                 <div>
@@ -242,19 +240,109 @@ const OwnerAuthPage = ({ onSuccess }) => {
                 {successMessage && <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg"><p className="text-sm text-green-600 font-medium">{successMessage}</p></div>}
                 
                 <div className='mt-6'>
-                    <FoodButton onClick={handleAuth} disabled={loading}>{loading ? 'Processing...' : (isLogin ? 'Login' : 'Register & Create Restaurant')}</FoodButton>
+                    <FoodButton onClick={handleAuth} disabled={loading}>{loading ?
+                        'Processing...' : (isLogin ? 'Login' : 'Register & Create Restaurant')}</FoodButton>
                 </div>
                 
                 <p className="mt-4 text-center text-sm" style={{ color: GRAY_TEXT }}>
-                    {isLogin ? "New partner?" : "Existing user?"}
-                    <button onClick={() => { setIsLogin(!isLogin); setError(''); setSuccessMessage(''); }} className="ml-2 font-bold hover:underline" style={{ color: ORANGE }} disabled={loading}>
-                        {isLogin ? 'Register' : 'Login'}
+                    {isLogin ?
+                        "New partner?" : "Existing user?"}
+                    <button onClick={() => { setIsLogin(!isLogin);
+                        setError(''); setSuccessMessage(''); }} className="ml-2 font-bold hover:underline" style={{ color: ORANGE }} disabled={loading}>
+                        {isLogin ?
+                            'Register' : 'Login'}
                     </button>
                 </p>
             </div>
         </div>
     );
 };
+
+// ENHANCED: New Product Sidebar Component
+const ProductSidebar = ({ productForm, setProductForm, handleProductSubmit, editingProduct, setShowProductModal }) => {
+    const isUpdating = !!editingProduct;
+
+    // Helper for easier form updates
+    const updateForm = (key, value) => setProductForm(prev => ({ ...prev, [key]: value }));
+
+    // Close on escape key press
+    useEffect(() => {
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape') {
+                setShowProductModal(false);
+            }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [setShowProductModal]);
+
+    return (
+        // The transition classes enable the slide animation effect
+        <div className="fixed inset-0 bg-black/50 z-50 transition-opacity duration-300">
+            <div className="fixed inset-y-0 right-0 w-full md:w-96 bg-white shadow-2xl p-6 transition-transform duration-300 transform translate-x-0 overflow-y-auto">
+                <div className="flex justify-between items-center mb-6 border-b pb-4">
+                    <h3 className="text-2xl font-bold" style={{ color: NAVY }}>{isUpdating ? 'Edit Product' : 'Add New Product'}</h3>
+                    <button onClick={() => setShowProductModal(false)} className="text-gray-500 hover:text-gray-800 transition">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Product Name *</label>
+                        <StyledInput type="text" placeholder="e.g., Chicken Adobo" value={productForm.name} onChange={(e) => updateForm('name', e.target.value)} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Price (₱) *</label>
+                            <StyledInput type="number" placeholder="99.00" value={productForm.price} onChange={(e) => updateForm('price', e.target.value)} />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Stock *</label>
+                            <StyledInput type="number" placeholder="50" value={productForm.stock} onChange={(e) => updateForm('stock', e.target.value)} />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Description</label>
+                        <textarea 
+                            className="w-full p-3 border rounded-lg bg-gray-50 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-shadow" 
+                            style={{ borderColor: BORDER }} 
+                            placeholder="Describe your dish..." 
+                            rows="3" 
+                            value={productForm.description} 
+                            onChange={(e) => updateForm('description', e.target.value)} 
+                        />
+                    </div>
+                    {/* ENHANCED: Clearer Image Input with Preview */}
+                    <div>
+                        <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Image URL (Direct Link)</label>
+                        <StyledInput type="text" placeholder="https://example.com/image.jpg" value={productForm.image_url} onChange={(e) => updateForm('image_url', e.target.value)} />
+                        {productForm.image_url && <img src={productForm.image_url} alt="Preview" className="mt-3 w-full h-32 object-cover rounded-lg border border-gray-200" />}
+                    </div>
+                </div>
+
+                <div className="flex gap-3 mt-8 sticky bottom-0 bg-white pt-4 border-t">
+                    <button 
+                        onClick={() => setShowProductModal(false)} 
+                        className="flex-1 py-3 bg-gray-200 text-gray-700 rounded-lg font-bold hover:bg-gray-300 transition"
+                    >
+                        Cancel
+                    </button>
+                    <button 
+                        onClick={handleProductSubmit} 
+                        className="flex-1 py-3 text-white rounded-lg font-bold hover:opacity-90 transition transform active:scale-[0.99]" 
+                        style={{ backgroundColor: ORANGE }}
+                    >
+                        {isUpdating ? 'Update Product' : 'Add Product'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 // ------------------------------------------------------------------
 // --- MAIN DASHBOARD COMPONENT ---
@@ -280,7 +368,6 @@ const RestaurantOwnerDashboard = () => {
         image_url: ''
     });
 
-    // --- FIX STARTS HERE ---
     // 1. Initialize state from Local Storage
     const [statusFilter, setStatusFilter] = useState(() => {
         if (typeof window !== 'undefined') {
@@ -295,8 +382,8 @@ const RestaurantOwnerDashboard = () => {
             localStorage.setItem(STATUS_FILTER_KEY, statusFilter);
         }
     }, [statusFilter]);
-    // --- FIX ENDS HERE ---
 
+    // Auth check logic
     useEffect(() => {
         let mounted = true;
         const checkAuth = async () => {
@@ -378,7 +465,7 @@ const RestaurantOwnerDashboard = () => {
                         price: i.price,
                         quantity: i.quantity
                     }));
-          
+         
                 const restaurantSubtotal = relevantItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
                 
                 return { 
@@ -394,6 +481,7 @@ const RestaurantOwnerDashboard = () => {
             setLoading(false);
         }
     }, [myRestaurant]);
+
 
     const loadProducts = useCallback(async () => {
         if (!myRestaurant) return;
@@ -414,7 +502,8 @@ const RestaurantOwnerDashboard = () => {
 
         try {
             const productData = {
-                food_item_id: editingProduct?.food_item_id || `${myRestaurant.id}_${Date.now()}`,
+                food_item_id: editingProduct?.food_item_id ||
+                    `${myRestaurant.id}_${Date.now()}`,
                 name: productForm.name,
                 price: parseFloat(productForm.price),
                 stock: parseInt(productForm.stock),
@@ -462,7 +551,8 @@ const RestaurantOwnerDashboard = () => {
         });
         setShowProductModal(true);
     }; 
-
+    
+    // Load my restaurant information
     useEffect(() => {
         if (!user || restaurantLoaded) return; 
         
@@ -501,13 +591,13 @@ const RestaurantOwnerDashboard = () => {
         };
 
         if (user) loadMyRestaurant();
-
         return () => { 
             mounted = false;
             if (retryTimeout) clearTimeout(retryTimeout);
         };
     }, [user, restaurantLoaded, restaurantCheckAttempts]); 
 
+    // Load data when restaurant is available
     useEffect(() => {
         if (myRestaurant) {
             loadOrders();
@@ -527,8 +617,8 @@ const RestaurantOwnerDashboard = () => {
     const filteredOrders = useMemo(() => {
         return orders.filter(order => statusFilter === 'all' || order.status === statusFilter);
     }, [orders, statusFilter]);
-    
-    // FIXED: Added all colors including Driver Assigned
+
+    // Status Badge utility function
     const getStatusBadge = (status) => {
         let color = GRAY_TEXT;
         let bg = '#F3F4F6';
@@ -540,7 +630,7 @@ const RestaurantOwnerDashboard = () => {
         return <span className="px-3 py-1 rounded-full text-xs font-bold" style={{ color, backgroundColor: bg }}>{status}</span>;
     };
 
-    // FIXED: Updated flow
+    // Get next status for the update button
     const getNextStatus = (current) => {
         const nextStatuses = {
             'Pending': 'Preparing',
@@ -555,7 +645,8 @@ const RestaurantOwnerDashboard = () => {
     if (!authReady) return <Loading />;
     if (!user) return <OwnerAuthPage onSuccess={setUser} />;
     if (!restaurantLoaded || (loading && !myRestaurant)) return <Loading />;
-
+    
+    // Fallback if user is logged in but no restaurant is linked
     if (!myRestaurant && restaurantLoaded) {
         return (
             <div className="min-h-screen flex items-center justify-center flex-col p-10" style={{ backgroundColor: LIGHT_BG }}>
@@ -577,18 +668,21 @@ const RestaurantOwnerDashboard = () => {
                         <h1 className="text-xl md:text-2xl font-black">👨‍🍳 {myRestaurant.name}</h1>
                         <p className="text-xs opacity-90">{myRestaurant.address_barangay}</p>
                     </div>
-                    <button onClick={handleSignOut} className="px-4 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-sm font-bold">Logout</button>
+                    <button onClick={handleSignOut} className="px-4 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-sm font-bold transition">Logout</button>
                 </div>
             </header>
 
             <div className="max-w-7xl mx-auto px-4 md:px-6">
                 <div className="flex gap-4 mt-6 border-b border-gray-200">
-                    <button onClick={() => setActiveTab('orders')} className={`pb-3 px-4 font-bold transition ${activeTab === 'orders' ? 'border-b-2 text-orange-600' : 'text-gray-500'}`} style={activeTab === 'orders' ? { borderColor: ORANGE } : {}}>📋 Orders</button>
-                    <button onClick={() => setActiveTab('products')} className={`pb-3 px-4 font-bold transition ${activeTab === 'products' ? 'border-b-2 text-orange-600' : 'text-gray-500'}`} style={activeTab === 'products' ? { borderColor: ORANGE } : {}}>🍔 Products</button>
+                    <button onClick={() => setActiveTab('orders')} className={`pb-3 px-4 font-bold transition ${activeTab === 'orders' ?
+                        'border-b-2 text-orange-600' : 'text-gray-500 hover:text-navy-700'}`} style={activeTab === 'orders' ? { borderColor: ORANGE } : {}}>📋 Orders</button>
+                    <button onClick={() => setActiveTab('products')} className={`pb-3 px-4 font-bold transition ${activeTab === 'products' ?
+                        'border-b-2 text-orange-600' : 'text-gray-500 hover:text-navy-700'}`} style={activeTab === 'products' ? { borderColor: ORANGE } : {}}>🍔 Products</button>
                 </div>
             </div>
 
             <div className="max-w-7xl mx-auto p-4 md:p-6">
+                {/* --- ORDERS TAB --- */}
                 {activeTab === 'orders' && (
                     <>
                         <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm">
@@ -597,21 +691,28 @@ const RestaurantOwnerDashboard = () => {
                                 <select 
                                     value={statusFilter} 
                                     onChange={(e) => setStatusFilter(e.target.value)}
-                                    className="p-2 border rounded-lg bg-gray-50 text-sm font-semibold"
+                                    className="p-2 border rounded-lg bg-gray-50 text-sm font-semibold hover:border-orange-300 transition"
                                 >
                                     <option value="all">All Orders</option>
                                     {ORDER_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                                 </select>
-                                <button onClick={loadOrders} className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200">🔄</button>
+                                <button onClick={loadOrders} className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition">🔄</button>
                             </div>
                         </div>
 
-                        {loading ? <Loading /> : filteredOrders.length === 0 ? (
-                           <div className="text-center py-20 opacity-50"><span className="text-5xl">📦</span><p className="mt-4 font-bold">No orders found.</p></div>
+                        {loading 
+                            ? <Loading /> : filteredOrders.length === 0 ? (
+                            <div className="text-center py-20 opacity-50"><span className="text-5xl">📦</span><p className="mt-4 font-bold">No orders found.</p></div>
                         ) : (
                             <div className="space-y-4">
                                 {filteredOrders.map(order => (
-                                    <div key={order.id} className="bg-white rounded-xl shadow-md overflow-hidden border-l-4" style={{ borderLeftColor: order.status === 'Completed' || order.status === 'Delivered' ? '#10B981' : ORANGE }}>
+                                    // ENHANCED: Hover animation and click-to-view logic
+                                    <div 
+                                        key={order.id} 
+                                        className="bg-white rounded-xl shadow-md overflow-hidden border-l-4 transition-all duration-300 hover:shadow-xl hover:scale-[1.005] cursor-pointer" 
+                                        style={{ borderLeftColor: order.status === 'Completed' || order.status === 'Delivered' ? '#10B981' : ORANGE }}
+                                        onClick={() => setExpandedOrder(expandedOrder === order.id ? null : order.id)} // View information feature
+                                    >
                                         <div className="p-5">
                                             <div className="flex justify-between items-start mb-4 pb-3 border-b border-gray-100">
                                                 <div>
@@ -629,15 +730,20 @@ const RestaurantOwnerDashboard = () => {
                                                 </div>
                                                 <div>
                                                     <p className="text-gray-500 text-xs uppercase font-bold tracking-wider">Restaurant Total</p>
-                                                    <p className="font-bold text-lg" style={{ color: NAVY }}>₱{order.restaurant_subtotal}</p>
+                                                    <p className="font-bold text-xl" style={{ color: NAVY }}>₱{order.restaurant_subtotal}</p>
                                                     <p className="text-gray-500 text-xs uppercase font-bold tracking-wider mt-2">Delivery Address</p>
                                                     <p className="text-gray-600 truncate">{order.shipping_address}</p>
                                                 </div>
                                             </div>
 
-                                            <button onClick={() => setExpandedOrder(expandedOrder === order.id ? null : order.id)} className="w-full text-left bg-gray-50 p-3 rounded-lg flex justify-between items-center hover:bg-gray-100 transition">
+                                            {/* Item toggle for view information */}
+                                            <button 
+                                                onClick={(e) => {e.stopPropagation(); setExpandedOrder(expandedOrder === order.id ? null : order.id);}} 
+                                                className="w-full text-left bg-gray-50 p-3 rounded-lg flex justify-between items-center hover:bg-gray-100 transition"
+                                            >
                                                 <span className="font-bold text-sm text-gray-700">View Items ({order.order_items.length})</span>
-                                                <span className="text-gray-400">{expandedOrder === order.id ? '▲' : '▼'}</span>
+                                                <span className="text-gray-400">{expandedOrder === order.id ?
+                                                    '▲' : '▼'}</span>
                                             </button>
 
                                             {expandedOrder === order.id && (
@@ -651,15 +757,24 @@ const RestaurantOwnerDashboard = () => {
                                                 </div>
                                             )}
 
+                                            {/* Action Buttons */}
                                             {order.status !== 'Completed' && order.status !== 'Cancelled' && (
                                                 <div className="mt-5 flex gap-3">
                                                     {getNextStatus(order.status) && (
-                                                        <button onClick={() => updateOrderStatus(order.id, getNextStatus(order.status))} className="flex-1 py-3 text-white rounded-lg font-bold hover:opacity-90 transition shadow-lg" style={{ backgroundColor: ORANGE }}>
+                                                        <button 
+                                                            onClick={(e) => {e.stopPropagation(); updateOrderStatus(order.id, getNextStatus(order.status));}} 
+                                                            className="flex-1 py-3 text-white rounded-lg font-bold hover:opacity-90 transition shadow-lg transform active:scale-[0.99]" 
+                                                            style={{ backgroundColor: ORANGE }}>
                                                             Mark as {getNextStatus(order.status)}
                                                         </button>
                                                     )}
-                                                    {(order.status === 'Pending' || order.status === 'Preparing') && ( 
-                                                        <button onClick={() => updateOrderStatus(order.id, 'Cancelled')} className="px-4 py-3 bg-red-100 text-red-600 rounded-lg font-bold hover:bg-red-200">Cancel Order</button>
+                                                    {(order.status === 'Pending' ||
+                                                        order.status === 'Preparing') && ( 
+                                                        <button 
+                                                            onClick={(e) => {e.stopPropagation(); updateOrderStatus(order.id, 'Cancelled');}} 
+                                                            className="px-4 py-3 bg-red-100 text-red-600 rounded-lg font-bold hover:bg-red-200 transition">
+                                                            Cancel Order
+                                                        </button>
                                                     )}
                                                 </div>
                                             )}
@@ -671,52 +786,59 @@ const RestaurantOwnerDashboard = () => {
                     </>
                 )}
 
+                {/* --- PRODUCTS TAB --- */}
                 {activeTab === 'products' && (
                     <>
                         <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm">
                             <h2 className="font-bold text-lg" style={{ color: NAVY }}>Menu Items</h2>
-                            <button onClick={() => { setEditingProduct(null); setProductForm({ name: '', price: '', stock: '', description: '', image_url: '' }); setShowProductModal(true); }} className="px-4 py-2 text-white rounded-lg font-bold hover:opacity-90 transition" style={{ backgroundColor: ORANGE }}>+ Add Product</button>
+                            <button onClick={() => { setEditingProduct(null);
+                                setProductForm({ name: '', price: '', stock: '', description: '', image_url: '' }); setShowProductModal(true);
+                            }} className="px-4 py-2 text-white rounded-lg font-bold hover:opacity-90 transition transform active:scale-[0.99]" style={{ backgroundColor: ORANGE }}>+ Add Product</button>
                         </div>
-                        {products.length === 0 ? (
-                            <div className="text-center py-20 opacity-50"><span className="text-5xl">🍽️</span><p className="mt-4 font-bold">No products yet.</p></div>
-                        ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {products.map(product => (
-                                    <div key={product.food_item_id} className="bg-white rounded-xl shadow-md overflow-hidden">
-                                        {product.image_url && <img src={product.image_url} alt={product.name} className="w-full h-48 object-cover" />}
-                                        <div className="p-4">
-                                            <h3 className="font-bold text-lg mb-2">{product.name}</h3>
-                                            <p className="text-gray-600 text-sm mb-3 line-clamp-2">{product.description}</p>
-                                            <div className="flex justify-between items-center mb-4"><span className="font-bold text-xl" style={{ color: ORANGE }}>₱{product.price}</span><span className="text-sm text-gray-500">Stock: {product.stock}</span></div>
-                                            <div className="flex gap-2">
-                                                <button onClick={() => openEditProduct(product)} className="flex-1 py-2 bg-blue-50 text-blue-600 rounded-lg font-bold hover:bg-blue-100">Edit</button>
-                                                <button onClick={() => handleDeleteProduct(product.food_item_id)} className="flex-1 py-2 bg-red-50 text-red-600 rounded-lg font-bold hover:bg-red-100">Delete</button>
+                        {products.length === 0 ?
+                            (
+                                <div className="text-center py-20 opacity-50"><span className="text-5xl">🍽️</span><p className="mt-4 font-bold">No products yet. Click 'Add Product' to start building your menu!</p></div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                    {products.map(product => (
+                                        // ENHANCED: Creative Product Card Design and Hover
+                                        <div key={product.food_item_id} className="bg-white rounded-2xl shadow-lg overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1">
+                                            {product.image_url && <img src={product.image_url} alt={product.name} className="w-full h-48 object-cover object-center" />}
+                                            <div className="p-4 relative">
+                                                {/* Info Icon for Quick View */}
+                                                <button 
+                                                    onClick={() => alert(`Product ID: ${product.food_item_id}\nRestaurant ID: ${product.restaurant_id}\nDescription: ${product.description || 'N/A'}`)}
+                                                    className="absolute top-4 right-4 text-gray-400 hover:text-navy-500 transition p-2 bg-white/70 rounded-full shadow-md"
+                                                    title="View Details"
+                                                >
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                                </button>
+
+                                                <h3 className="font-extrabold text-xl mb-1">{product.name}</h3>
+                                                <p className="text-gray-500 text-sm mb-3 line-clamp-2">{product.description || 'No description provided.'}</p>
+                                                <div className="flex justify-between items-center mb-4 border-t pt-3">
+                                                    <span className="font-bold text-2xl" style={{ color: ORANGE }}>₱{product.price}</span>
+                                                    <span className={`text-sm font-semibold px-3 py-1 rounded ${product.stock > 10 ? 'bg-green-100 text-green-600' : product.stock > 0 ? 'bg-yellow-100 text-yellow-600' : 'bg-red-100 text-red-600'}`}>Stock: {product.stock}</span>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button onClick={() => openEditProduct(product)} className="flex-1 py-2 bg-blue-50 text-blue-600 rounded-lg font-bold hover:bg-blue-100 transition">Edit</button>
+                                                    <button onClick={() => handleDeleteProduct(product.food_item_id)} className="flex-1 py-2 bg-red-50 text-red-600 rounded-lg font-bold hover:bg-red-100 transition">Delete</button>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
-                        {showProductModal && (
-                            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                                <div className="bg-white rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-                                    <h3 className="text-2xl font-bold mb-4" style={{ color: NAVY }}>{editingProduct ? 'Edit Product' : 'Add New Product'}</h3>
-                                    <div className="space-y-3">
-                                        <div><label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Product Name *</label><StyledInput type="text" placeholder="e.g., Chicken Adobo" value={productForm.name} onChange={(e) => setProductForm({...productForm, name: e.target.value})} /></div>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <div><label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Price (₱) *</label><StyledInput type="number" placeholder="99.00" value={productForm.price} onChange={(e) => setProductForm({...productForm, price: e.target.value})} /></div>
-                                            <div><label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Stock *</label><StyledInput type="number" placeholder="50" value={productForm.stock} onChange={(e) => setProductForm({...productForm, stock: e.target.value})} /></div>
-                                        </div>
-                                        <div><label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Description</label><textarea className="w-full p-3 border rounded-lg bg-gray-50 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500" style={{ borderColor: BORDER }} placeholder="Describe your dish..." rows="3" value={productForm.description} onChange={(e) => setProductForm({...productForm, description: e.target.value})} /></div>
-                                        <div><label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Image URL</label><StyledInput type="text" placeholder="https://example.com/image.jpg" value={productForm.image_url} onChange={(e) => setProductForm({...productForm, image_url: e.target.value})} /></div>
-                                    </div>
-                                    <div className="flex gap-3 mt-6">
-                                        <button onClick={() => { setShowProductModal(false); setEditingProduct(null); }} className="flex-1 py-3 bg-gray-200 text-gray-700 rounded-lg font-bold hover:bg-gray-300">Cancel</button>
-                                        <button onClick={handleProductSubmit} className="flex-1 py-3 text-white rounded-lg font-bold hover:opacity-90 transition" style={{ backgroundColor: ORANGE }}>{editingProduct ? 'Update' : 'Add'} Product</button>
-                                    </div>
+                                    ))}
                                 </div>
-                            </div>
+                            )}
+
+                        {/* Slide-Out Sidebar for Product Management */}
+                        {showProductModal && (
+                            <ProductSidebar 
+                                productForm={productForm}
+                                setProductForm={setProductForm}
+                                handleProductSubmit={handleProductSubmit}
+                                editingProduct={editingProduct}
+                                setShowProductModal={setShowProductModal}
+                            />
                         )}
                     </>
                 )}
@@ -725,4 +847,4 @@ const RestaurantOwnerDashboard = () => {
     );
 };
 
-export default RestaurantOwnerDashboard;    
+export default RestaurantOwnerDashboard;

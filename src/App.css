@@ -46,7 +46,9 @@ a {
   color: var(--shopee-orange);
   text-decoration: inherit;
 }
-
+h1.text-xl.md\:text-2xl.font-white {
+    color: white;
+}
 a:hover {
   color: #d43d1d;
 }

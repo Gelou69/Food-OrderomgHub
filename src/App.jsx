@@ -106,7 +106,10 @@ const App = () => {
       {!hideNavigation && (
         <header className="w-full shadow-lg p-3 z-20 sticky top-0" style={{ backgroundColor: ORANGE }}>
           <div className="flex justify-between items-center w-full max-w-3xl mx-auto"> 
-            <h1 className="text-xl font-black text-white">ILIGAN <span className='text-sm font-light italic'>Food</span></h1>
+            <div className="flex items-center">
+              <img src="/vite.svg" alt="ILIGAN Food logo" className="h-8" />
+              <span className="sr-only">ILIGAN Food</span>
+            </div>
             
             {user && (
               <div className="flex items-center text-white text-sm">

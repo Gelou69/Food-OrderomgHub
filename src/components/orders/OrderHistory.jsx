@@ -32,6 +32,8 @@ export const OrderHistory = ({ setPage, user, setSelectedOrder }) => {
           quantity,
           food_items (
             restaurant_id,
+            food_item_id,
+            image_url,
             restaurants (
               name,
               image_url

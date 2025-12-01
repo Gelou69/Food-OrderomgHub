@@ -12,6 +12,44 @@ export const OrderTracking = ({ order, setPage, user }) => {
     name: currentOrder.restaurantName || 'Loading...',
     address: 'Locating restaurant...',
   });
+
+  // Attach resolved image URLs to order items (once on mount or when `order` prop changes)
+  useEffect(() => {
+    let mounted = true;
+    const attachImagesToItems = async () => {
+      const items = currentOrder.order_items || [];
+      if (!items.length) return;
+
+      const bucketsToTry = ['food-images', 'restaurant-images'];
+
+      const updated = await Promise.all(items.map(async (i) => {
+        // preserve existing image_url if already attached
+        if (i.image_url) return i;
+        const raw = i.food_items?.image_url || i.image_url || null;
+        if (!raw) return i;
+
+        if (raw.startsWith && raw.startsWith('http')) return { ...i, image_url: raw };
+
+        for (const bucket of bucketsToTry) {
+          try {
+            const { data } = supabase.storage.from(bucket).getPublicUrl(raw);
+            if (data?.publicUrl) return { ...i, image_url: data.publicUrl };
+          } catch (e) {
+            // ignore and try next bucket
+          }
+        }
+
+        return i;
+      }));
+
+      if (mounted) {
+        setCurrentOrder(prev => ({ ...prev, order_items: updated }));
+      }
+    };
+
+    attachImagesToItems();
+    return () => { mounted = false; };
+  }, [order]);
   
   // Logic helpers
   const isCompleted = currentOrder.status === 'Delivered' || currentOrder.status === 'Completed';
@@ -160,12 +198,24 @@ export const OrderTracking = ({ order, setPage, user }) => {
         <h3 className="font-bold text-lg mb-3 border-b pb-2" style={{ color: NAVY }}>Items Ordered</h3>
         <div className="space-y-3">
             {currentOrder.order_items.map((item, index) => (
-            <div key={item.food_item_id || index} className="flex justify-between text-gray-700">
-                <div className='flex items-center gap-2'>
-                    <span className='font-bold text-gray-900 border px-2 py-0.5 rounded text-sm'>x{item.quantity}</span>
-                    <p className="text-base font-medium">{item.name}</p>
+            <div key={item.food_item_id || index} className="flex justify-between text-gray-700 items-center">
+              <div className='flex items-center gap-3'>
+                <div className="w-14 h-14 bg-gray-100 rounded overflow-hidden flex items-center justify-center">
+                  {item.image_url ? (
+                    <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="text-xs text-gray-400">No image</div>
+                  )}
                 </div>
-                <p className="font-semibold text-base">₱{(item.price * item.quantity).toFixed(2)}</p>
+                <div>
+                  <div className='flex items-center gap-2'>
+                  <span className='font-bold text-gray-900 border px-2 py-0.5 rounded text-sm'>x{item.quantity}</span>
+                  <p className="text-base font-medium">{item.name}</p>
+                  </div>
+                  {item.description && <div className="text-xs text-gray-500">{item.description}</div>}
+                </div>
+              </div>
+              <p className="font-semibold text-base">₱{(item.price * item.quantity).toFixed(2)}</p>
             </div>
             ))}
         </div>

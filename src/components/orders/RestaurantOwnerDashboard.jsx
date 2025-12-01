@@ -381,22 +381,6 @@ const RestaurantOwnerDashboard = () => {
                 .in('id', uniqueOrderIds)
                 .order('created_at', { ascending: false });
             if (ordersError) throw ordersError;
-            // helper to resolve image URLs (handles full URLs or storage paths)
-            const resolveImageUrl = async (imgPath) => {
-                if (!imgPath) return null;
-                if (imgPath.startsWith('http')) return imgPath;
-                const bucketsToTry = ['food-images', 'restaurant-images'];
-                for (const bucket of bucketsToTry) {
-                    try {
-                        const { data } = supabase.storage.from(bucket).getPublicUrl(imgPath);
-                        if (data?.publicUrl) return data.publicUrl;
-                    } catch (err) {
-                        // ignore and try next
-                    }
-                }
-                return null;
-            };
-
             const fullOrders = await Promise.all(ordersData.map(async order => {
                 const relevantItemsRaw = items.filter(i => i.order_id === order.id);
                 const relevantItems = await Promise.all(relevantItemsRaw.map(async i => {
@@ -432,7 +416,12 @@ const RestaurantOwnerDashboard = () => {
         try {
             const { data, error } = await supabase.from('food_items').select('*').eq('restaurant_id', myRestaurant.id).order('name');
             if (error) throw error;
-            setProducts(data || []);
+            // resolve any storage paths to public URLs for display
+            const resolved = await Promise.all((data || []).map(async p => ({
+                ...p,
+                image_url: p.image_url ? await resolveImageUrl(p.image_url) : null
+            })));
+            setProducts(resolved);
         } catch (error) {
             console.error('Error loading products:', error);
         }
@@ -660,6 +649,22 @@ const RestaurantOwnerDashboard = () => {
             'Delivered': 'Completed' 
         };
         return nextStatuses[current] || null;
+    };
+
+    // Resolve image paths to usable public URLs.
+    const resolveImageUrl = async (imgPath) => {
+        if (!imgPath) return null;
+        if (typeof imgPath === 'string' && imgPath.startsWith('http')) return imgPath;
+        const bucketsToTry = ['food-images', 'restaurant-images'];
+        for (const bucket of bucketsToTry) {
+            try {
+                const { data } = supabase.storage.from(bucket).getPublicUrl(imgPath);
+                if (data?.publicUrl) return data.publicUrl;
+            } catch (err) {
+                // ignore and try next
+            }
+        }
+        return null;
     };
 
     if (!authReady) return <Loading />;

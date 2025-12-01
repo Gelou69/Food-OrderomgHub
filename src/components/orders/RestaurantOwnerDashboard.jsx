@@ -40,6 +40,66 @@ const Loading = () => (
     </div>
 );
 
+// --- RESTAURANT PROFILE SIDEBAR ---
+const RestaurantProfileSidebar = ({ show, onClose, profileForm, setProfileForm, handleProfileSubmit, ownerProfile }) => {
+    const sidebarRef = useRef(null);
+
+    useEffect(() => {
+        if (!show) return;
+        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [show, onClose]);
+
+    if (!show) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black/40 z-50 flex">
+            <div className="ml-auto w-full md:w-96 bg-white h-full shadow-2xl p-6 overflow-y-auto transform transition-transform duration-300">
+                <div className="flex items-center justify-between mb-4 border-b pb-4">
+                    <h3 className="text-2xl font-bold" style={{ color: NAVY }}>Restaurant Profile</h3>
+                    <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
+                        ✕
+                    </button>
+                </div>
+
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Restaurant Name</label>
+                        <StyledInput value={profileForm.name} onChange={(e) => setProfileForm(p => ({ ...p, name: e.target.value }))} />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Barangay</label>
+                        <StyledInput value={profileForm.address_barangay} onChange={(e) => setProfileForm(p => ({ ...p, address_barangay: e.target.value }))} />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Street</label>
+                        <StyledInput value={profileForm.address_street} onChange={(e) => setProfileForm(p => ({ ...p, address_street: e.target.value }))} />
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Image URL (Direct Link)</label>
+                        <StyledInput value={profileForm.image_url} onChange={(e) => setProfileForm(p => ({ ...p, image_url: e.target.value }))} placeholder="https://example.com/image.jpg" />
+                        {profileForm.image_url && (
+                            <img src={profileForm.image_url} alt="Preview" className="mt-3 w-full h-40 object-cover rounded-lg border border-gray-200" />
+                        )}
+                    </div>
+
+                    <div className="pt-2 text-sm text-gray-600">
+                        <p><strong>Owner:</strong> {ownerProfile?.contact_name || '—'}</p>
+                        <p><strong>Phone:</strong> {ownerProfile?.phone_number || '—'}</p>
+                    </div>
+                </div>
+
+                <div className="flex gap-3 mt-8 sticky bottom-0 bg-white pt-4 border-t">
+                    <button onClick={onClose} className="flex-1 py-3 bg-gray-200 text-gray-700 rounded-lg font-bold hover:bg-gray-300 transition">Close</button>
+                    <button onClick={handleProfileSubmit} className="flex-1 py-3 text-white rounded-lg font-bold hover:opacity-90 transition" style={{ backgroundColor: ORANGE }}>Save Profile</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // ------------------------------------------------------------------
 // --- OWNER AUTHENTICATION COMPONENT ---
 // ------------------------------------------------------------------

@@ -485,7 +485,14 @@ const RestaurantOwnerDashboard = () => {
         try {
             const path = `${myRestaurant.id}/${Date.now()}_${file.name}`;
             const { error: uploadError } = await supabase.storage.from('restaurant-images').upload(path, file, { upsert: true });
-            if (uploadError) throw uploadError;
+            if (uploadError) {
+                // Provide a clearer error when bucket is missing
+                const msg = (uploadError.message || uploadError.error_description || '').toString();
+                if (msg.toLowerCase().includes('bucket') || msg.toLowerCase().includes('not found')) {
+                    throw new Error('Bucket "restaurant-images" not found. Create a public storage bucket named "restaurant-images" in your Supabase project or update the bucket name in the frontend code.');
+                }
+                throw uploadError;
+            }
             const { data } = supabase.storage.from('restaurant-images').getPublicUrl(path);
             return data?.publicUrl || null;
         } catch (err) {
@@ -500,7 +507,17 @@ const RestaurantOwnerDashboard = () => {
         try {
             let imageUrl = restaurantForm.imagePreview || myRestaurant.image_url || null;
             if (restaurantForm.imageFile) {
-                imageUrl = await uploadRestaurantImage(restaurantForm.imageFile);
+                try {
+                    imageUrl = await uploadRestaurantImage(restaurantForm.imageFile);
+                } catch (uploadErr) {
+                    // If bucket is missing, notify owner and continue saving without image
+                    if ((uploadErr.message || '').toLowerCase().includes('bucket "restaurant-images" not found')) {
+                        alert('Upload failed: storage bucket "restaurant-images" not found. Restaurant will be saved without the image. Create the bucket in Supabase Storage (public) or change the bucket name in the code.');
+                        imageUrl = myRestaurant.image_url || null;
+                    } else {
+                        throw uploadErr;
+                    }
+                }
             }
 
             const { error } = await supabase.from('restaurants').update({

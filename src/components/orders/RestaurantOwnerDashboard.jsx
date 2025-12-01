@@ -1,5 +1,5 @@
 // components/owner/RestaurantOwnerDashboard.jsx - FINAL FIXED VERSION
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../../config/supabase';
 
 // --- CONSTANTS ---
@@ -39,76 +39,6 @@ const Loading = () => (
         <p className="text-lg font-semibold" style={{ color: NAVY }}>Loading...</p>
     </div>
 );
-
-// --- RESTAURANT PROFILE SIDEBAR ---
-const RestaurantProfileSidebar = ({ show, onClose, profileForm, setProfileForm, handleProfileSubmit, ownerProfile }) => {
-    const sidebarRef = useRef(null);
-
-    useEffect(() => {
-        if (!show) return;
-        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
-        document.addEventListener('keydown', onKey);
-        return () => document.removeEventListener('keydown', onKey);
-    }, [show, onClose]);
-
-    if (!show) return null;
-
-    return (
-        <div className="fixed inset-0 bg-black/40 z-50 flex">
-            <div className="ml-auto w-full md:w-96 bg-white h-full shadow-2xl p-6 overflow-y-auto transform transition-transform duration-300">
-                <div className="flex items-center justify-between mb-4 border-b pb-4">
-                    <h3 className="text-2xl font-bold" style={{ color: NAVY }}>Restaurant Profile</h3>
-                    <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
-                        ✕
-                    </button>
-                </div>
-
-                <div className="space-y-4">
-                    <div>
-                        <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Restaurant Name</label>
-                        <StyledInput value={profileForm.name} onChange={(e) => setProfileForm(p => ({ ...p, name: e.target.value }))} />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Barangay</label>
-                        <StyledInput value={profileForm.address_barangay} onChange={(e) => setProfileForm(p => ({ ...p, address_barangay: e.target.value }))} />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Street</label>
-                        <StyledInput value={profileForm.address_street} onChange={(e) => setProfileForm(p => ({ ...p, address_street: e.target.value }))} />
-                    </div>
-
-                    <div>
-                        <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Image URL (Direct Link)</label>
-                        <StyledInput value={profileForm.image_url} onChange={(e) => setProfileForm(p => ({ ...p, image_url: e.target.value }))} placeholder="https://example.com/image.jpg" />
-                        {profileForm.image_url && (
-                            <img src={profileForm.image_url} alt="Preview" className="mt-3 w-full h-40 object-cover rounded-lg border border-gray-200" />
-                        )}
-                    </div>
-
-                    <div className="pt-2 text-sm text-gray-600">
-                        <p><strong>Owner:</strong> {ownerProfile?.contact_name || '—'}</p>
-                        <p><strong>Phone:</strong> {ownerProfile?.phone_number || '—'}</p>
-                    </div>
-                </div>
-
-                <div className="flex gap-3 mt-8 sticky bottom-0 bg-white pt-4 border-t">
-                    <button onClick={onClose} className="flex-1 py-3 bg-gray-200 text-gray-700 rounded-lg font-bold hover:bg-gray-300 transition">Close</button>
-                    <button onClick={handleProfileSubmit} className="flex-1 py-3 text-white rounded-lg font-bold hover:opacity-90 transition" style={{ backgroundColor: ORANGE }}>Save Profile</button>
-                </div>
-            </div>
-            {showProfileSidebar && (
-                <RestaurantProfileSidebar
-                    show={showProfileSidebar}
-                    onClose={() => setShowProfileSidebar(false)}
-                    profileForm={profileForm}
-                    setProfileForm={setProfileForm}
-                    handleProfileSubmit={handleProfileSubmit}
-                    ownerProfile={ownerProfile}
-                />
-            )}
-        </div>
-    );
-};
 
 // ------------------------------------------------------------------
 // --- OWNER AUTHENTICATION COMPONENT ---
@@ -350,11 +280,6 @@ const RestaurantOwnerDashboard = () => {
         image_url: ''
     });
 
-    // Restaurant profile & owner details
-    const [showProfileSidebar, setShowProfileSidebar] = useState(false);
-    const [profileForm, setProfileForm] = useState({ name: '', address_street: '', address_barangay: '', image_url: '' });
-    const [ownerProfile, setOwnerProfile] = useState(null);
-
     // --- FIX STARTS HERE ---
     // 1. Initialize state from Local Storage
     const [statusFilter, setStatusFilter] = useState(() => {
@@ -538,26 +463,6 @@ const RestaurantOwnerDashboard = () => {
         setShowProductModal(true);
     }; 
 
-    // Update restaurant profile (name, address, image_url)
-    const handleProfileSubmit = async () => {
-        if (!myRestaurant) return;
-        try {
-            const updatePayload = {
-                name: profileForm.name,
-                address_street: profileForm.address_street,
-                address_barangay: profileForm.address_barangay,
-                image_url: profileForm.image_url
-            };
-            const { data: updated, error } = await supabase.from('restaurants').update(updatePayload).eq('id', myRestaurant.id).select().single();
-            if (error) throw error;
-            setMyRestaurant(updated || myRestaurant);
-            setShowProfileSidebar(false);
-        } catch (err) {
-            console.error('Failed to update restaurant profile', err);
-            alert('Failed to save profile: ' + (err.message || err));
-        }
-    };
-
     useEffect(() => {
         if (!user || restaurantLoaded) return; 
         
@@ -582,22 +487,6 @@ const RestaurantOwnerDashboard = () => {
                     }
                     
                     setMyRestaurant(data || null);
-                    // populate profile form from restaurant row
-                    if (data) {
-                        setProfileForm({
-                            name: data.name || '',
-                            address_street: data.address_street || '',
-                            address_barangay: data.address_barangay || '',
-                            image_url: data.image_url || ''
-                        });
-                        // fetch owner profile (owners table)
-                        try {
-                            const { data: ownerData } = await supabase.from('owners').select('*').eq('id', user.id).maybeSingle();
-                            if (ownerData) setOwnerProfile(ownerData);
-                        } catch (ownerErr) {
-                            console.error('Failed to fetch owner profile', ownerErr);
-                        }
-                    }
                     setRestaurantLoaded(true); 
                 }
             } catch (err) {
@@ -684,21 +573,11 @@ const RestaurantOwnerDashboard = () => {
         <div className="min-h-screen" style={{ backgroundColor: LIGHT_BG }}>
             <header className="shadow-lg p-4 sticky top-0 z-20" style={{ backgroundColor: NAVY }}>
                 <div className="max-w-7xl mx-auto flex justify-between items-center text-white">
-                    <div className="flex items-center gap-4">
-                        {myRestaurant?.image_url ? (
-                            <img src={myRestaurant.image_url} alt={myRestaurant.name} className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm" />
-                        ) : (
-                            <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-lg">🍽️</div>
-                        )}
-                        <div>
-                            <h1 className="text-xl md:text-2xl font-black">👨‍🍳 {myRestaurant.name}</h1>
-                            <p className="text-xs opacity-90">{myRestaurant.address_barangay}</p>
-                        </div>
+                    <div>
+                        <h1 className="text-xl md:text-2xl font-black">👨‍🍳 {myRestaurant.name}</h1>
+                        <p className="text-xs opacity-90">{myRestaurant.address_barangay}</p>
                     </div>
-                    <div className="flex items-center gap-3">
-                        <button onClick={() => setShowProfileSidebar(true)} className="px-3 py-1 rounded-full bg-white/20 hover:bg-white/30 text-sm font-bold">Edit Profile</button>
-                        <button onClick={handleSignOut} className="px-4 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-sm font-bold">Logout</button>
-                    </div>
+                    <button onClick={handleSignOut} className="px-4 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-sm font-bold">Logout</button>
                 </div>
             </header>
 

@@ -279,6 +279,12 @@ const RestaurantOwnerDashboard = () => {
         description: '',
         image_url: ''
     });
+    // Profile modal state for editing restaurant name and image
+    const [showProfileModal, setShowProfileModal] = useState(false);
+    const [profileForm, setProfileForm] = useState({
+        name: '',
+        image_url: ''
+    });
 
     // --- FIX STARTS HERE ---
     // 1. Initialize state from Local Storage
@@ -451,6 +457,41 @@ const RestaurantOwnerDashboard = () => {
         }
     };
 
+    const openProfileModal = () => {
+        setProfileForm({
+            name: myRestaurant?.name || '',
+            image_url: myRestaurant?.image_url || ''
+        });
+        setShowProfileModal(true);
+    };
+
+    const handleProfileSubmit = async () => {
+        if (!profileForm.name) {
+            alert('Restaurant name is required');
+            return;
+        }
+
+        try {
+            const updateData = {
+                name: profileForm.name,
+                image_url: profileForm.image_url || null
+            };
+            const { data, error } = await supabase
+                .from('restaurants')
+                .update(updateData)
+                .eq('id', myRestaurant.id)
+                .select()
+                .single();
+            if (error) throw error;
+            setMyRestaurant(prev => ({ ...prev, ...(data || {}) }));
+            setShowProfileModal(false);
+            alert('Profile updated');
+        } catch (err) {
+            console.error('Error updating restaurant profile:', err);
+            alert('Failed to update profile: ' + (err.message || err.toString()));
+        }
+    };
+
     const openEditProduct = (product) => {
         setEditingProduct(product);
         setProductForm({
@@ -573,11 +614,21 @@ const RestaurantOwnerDashboard = () => {
         <div className="min-h-screen" style={{ backgroundColor: LIGHT_BG }}>
             <header className="shadow-lg p-4 sticky top-0 z-20" style={{ backgroundColor: NAVY }}>
                 <div className="max-w-7xl mx-auto flex justify-between items-center text-white">
-                    <div>
-                        <h1 className="text-xl md:text-2xl font-black">👨‍🍳 {myRestaurant.name}</h1>
-                        <p className="text-xs opacity-90">{myRestaurant.address_barangay}</p>
+                    <div className="flex items-center gap-4">
+                        {myRestaurant.image_url ? (
+                            <img src={myRestaurant.image_url} alt={myRestaurant.name} className="w-12 h-12 rounded-full object-cover border-2 border-white/30" />
+                        ) : (
+                            <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-lg">🍽️</div>
+                        )}
+                        <div>
+                            <h1 className="text-xl md:text-2xl font-black">👨‍🍳 {myRestaurant.name}</h1>
+                            <p className="text-xs opacity-90">{myRestaurant.address_barangay}</p>
+                        </div>
                     </div>
-                    <button onClick={handleSignOut} className="px-4 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-sm font-bold">Logout</button>
+                    <div className="flex items-center gap-3">
+                        <button onClick={openProfileModal} className="px-3 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-sm font-bold">✏️ Edit</button>
+                        <button onClick={handleSignOut} className="px-4 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-sm font-bold">Logout</button>
+                    </div>
                 </div>
             </header>
 
@@ -714,6 +765,34 @@ const RestaurantOwnerDashboard = () => {
                                     <div className="flex gap-3 mt-6">
                                         <button onClick={() => { setShowProductModal(false); setEditingProduct(null); }} className="flex-1 py-3 bg-gray-200 text-gray-700 rounded-lg font-bold hover:bg-gray-300">Cancel</button>
                                         <button onClick={handleProductSubmit} className="flex-1 py-3 text-white rounded-lg font-bold hover:opacity-90 transition" style={{ backgroundColor: ORANGE }}>{editingProduct ? 'Update' : 'Add'} Product</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        {showProfileModal && (
+                            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                                <div className="bg-white rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+                                    <h3 className="text-2xl font-bold mb-4" style={{ color: NAVY }}>Edit Restaurant Profile</h3>
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Restaurant Name *</label>
+                                            <StyledInput type="text" placeholder="Restaurant name" value={profileForm.name} onChange={(e) => setProfileForm({...profileForm, name: e.target.value})} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Image URL</label>
+                                            <StyledInput type="text" placeholder="https://example.com/image.jpg" value={profileForm.image_url} onChange={(e) => setProfileForm({...profileForm, image_url: e.target.value})} />
+                                            <p className="text-xs text-gray-500 mt-1">Provide a public image URL for your restaurant. Leave blank to remove.</p>
+                                        </div>
+                                        {profileForm.image_url && (
+                                            <div className="mt-2">
+                                                <p className="text-xs font-bold mb-1">Preview</p>
+                                                <img src={profileForm.image_url} alt="preview" className="w-32 h-32 object-cover rounded-lg border" />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="flex gap-3 mt-6">
+                                        <button onClick={() => { setShowProfileModal(false); }} className="flex-1 py-3 bg-gray-200 text-gray-700 rounded-lg font-bold hover:bg-gray-300">Cancel</button>
+                                        <button onClick={handleProfileSubmit} className="flex-1 py-3 text-white rounded-lg font-bold hover:opacity-90 transition" style={{ backgroundColor: ORANGE }}>Save Profile</button>
                                     </div>
                                 </div>
                             </div>

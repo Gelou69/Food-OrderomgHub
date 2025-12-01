@@ -47,58 +47,71 @@ export const OrderHistory = ({ setPage, user, setSelectedOrder }) => {
       setGroupedOrders([]);
     } else {
       // 2. Process data: Group order items by restaurant within each order
-      const groupedDisplayOrders = fetchedOrders.flatMap(order => {
-        // Group items by restaurant_id
-        const restaurantGroups = order.order_items.reduce((acc, item) => {
+      // Resolve item image URLs (from nested food_items or storage paths)
+      const bucketsToTry = ['food-images', 'restaurant-images'];
+
+      const resolveImage = async (raw) => {
+        if (!raw) return null;
+        let value = raw;
+        if (typeof value === 'object') {
+          value = value.url || value.path || value.publicUrl || value.public_url || value.publicURL || null;
+        }
+        if (!value) return null;
+        value = String(value).trim();
+        if (/^https?:\/\//i.test(value) || value.startsWith('data:')) return value;
+        // normalize
+        const key = value.replace(/^\/+/, '');
+        for (const bucket of bucketsToTry) {
+          try {
+            const { data } = supabase.storage.from(bucket).getPublicUrl(key);
+            const publicUrl = data?.publicUrl || data?.publicURL || data?.public_url || data?.url;
+            if (publicUrl) return publicUrl;
+          } catch (e) {
+            // try next
+          }
+        }
+        return null;
+      };
+
+      const groupedDisplayOrders = (await Promise.all(fetchedOrders.map(async order => {
+        // Normalize and enrich items with image_url
+        const enrichedItems = await Promise.all((order.order_items || []).map(async item => {
+          const raw = item.food_items?.image_url || item.image_url || null;
+          const image_url = await resolveImage(raw);
+          return { ...item, image_url };
+        }));
+
+        // Group items by restaurant_id/name
+        const restaurantGroups = enrichedItems.reduce((acc, item) => {
           const restaurant = item.food_items?.restaurants;
-          const restaurantId = restaurant?.name; // Use name as the key for grouping
-
-          if (!restaurantId) return acc; // Skip items with no restaurant data
-
+          const restaurantId = restaurant?.name;
+          if (!restaurantId) return acc;
           if (!acc[restaurantId]) {
             acc[restaurantId] = {
               restaurantName: restaurant.name,
-              restaurantId: item.food_items.restaurant_id,
+              restaurantId: item.food_items?.restaurant_id,
               items: [],
               subtotal: 0,
             };
           }
-
           const itemTotal = item.price * item.quantity;
           acc[restaurantId].items.push(item);
           acc[restaurantId].subtotal += itemTotal;
           return acc;
         }, {});
 
-        // Convert the groups into an array of display objects
-        const restaurantOrderSegments = Object.values(restaurantGroups).map(group => {
-          // Calculate the total for this segment (items subtotal + delivery fee)
-          // Note: The delivery_fee and total in the original order still represent the entire order.
-          // For simplicity, we only show the item subtotal for the segment.
-          // If the fee should be applied to one restaurant, more complex logic is needed.
-          const segmentTotal = group.subtotal; 
+        const restaurantOrderSegments = Object.values(restaurantGroups).map(group => ({
+          ...order,
+          displayId: `${order.id}-${group.restaurantId}`,
+          restaurantName: group.restaurantName,
+          order_items: group.items,
+          total: group.subtotal,
+          createdAt: new Date(order.created_at).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }),
+          isSegment: true,
+        }));
 
-          return {
-            ...order,
-            // Unique ID for the display list (original order ID + restaurant ID)
-            displayId: `${order.id}-${group.restaurantId}`, 
-            // Only this restaurant's name
-            restaurantName: group.restaurantName, 
-            // Only this restaurant's items
-            order_items: group.items, 
-            // The calculated total for this segment
-            total: segmentTotal, 
-            createdAt: new Date(order.created_at).toLocaleDateString('en-US', { 
-              day: 'numeric', month: 'short', year: 'numeric' 
-            }),
-            // Mark it as a segment of the original order
-            isSegment: true, 
-          };
-        });
-
-        // Ensure orders with no valid items are not returned
         return restaurantOrderSegments.length > 0 ? restaurantOrderSegments : [];
-      });
+      }))).flat();
 
       setGroupedOrders(groupedDisplayOrders);
     }

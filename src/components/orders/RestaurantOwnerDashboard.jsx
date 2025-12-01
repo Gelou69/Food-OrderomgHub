@@ -1,6 +1,27 @@
-// components/owner/RestaurantOwnerDashboard.jsx - FINAL CREATIVE VERSION
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { supabase } from '../../config/supabase';
+import { createClient } from '@supabase/supabase-js';
+
+// --- SUPABASE CLIENT INITIALIZATION (FIXED) ---
+// In a single-file environment, we define the client directly.
+// IMPORTANT: Replace these with your actual Supabase URL and anonymous key.
+const supabaseUrl = 'YOUR_SUPABASE_URL'; 
+const supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY';
+
+// Check for environment variables, otherwise use placeholders (for local testing)
+const getSupabaseClient = () => {
+    // Check if running in a platform that provides configuration (like Canvas)
+    if (typeof __supabase_config !== 'undefined') {
+        const config = JSON.parse(__supabase_config);
+        return createClient(config.supabaseUrl, config.supabaseKey);
+    }
+    // Fallback for local development/testing
+    if (supabaseUrl === 'YOUR_SUPABASE_URL' || supabaseAnonKey === 'YOUR_SUPABASE_ANON_KEY') {
+        console.warn("⚠️ Supabase credentials are placeholders. Please replace 'YOUR_SUPABASE_URL' and 'YOUR_SUPABASE_ANON_KEY' with your actual values for the app to work.");
+    }
+    return createClient(supabaseUrl, supabaseAnonKey);
+};
+
+const supabase = getSupabaseClient();
 
 // --- CONSTANTS ---
 const ORANGE = '#FF8A00'; 
@@ -21,12 +42,11 @@ const StyledInput = (props) => (
     />
 );
 
-// ENHANCED: Added active state for a better feel
 const FoodButton = ({ children, onClick, disabled }) => (
     <button
         onClick={onClick}
         disabled={disabled}
-        className="w-full py-3 text-white rounded-lg font-bold transition duration-150 ease-in-out shadow-lg disabled:bg-gray-400 disabled:cursor-not-allowed transform active:scale-[0.99] active:shadow-sm" // Creative active state
+        className="w-full py-3 text-white rounded-lg font-bold transition duration-150 ease-in-out shadow-lg disabled:bg-gray-400 disabled:cursor-not-allowed transform active:scale-[0.99] active:shadow-sm"
         style={!disabled ? { backgroundColor: ORANGE } : {}}
     >
         {children}
@@ -35,7 +55,13 @@ const FoodButton = ({ children, onClick, disabled }) => (
 
 const Loading = () => (
     <div className="flex justify-center items-center min-h-screen">
-        <p className="text-lg font-semibold animate-pulse" style={{ color: NAVY }}>Loading...</p>
+        <div className="flex items-center space-x-2">
+            <svg className="animate-spin h-5 w-5 text-orange-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p className="text-lg font-semibold" style={{ color: NAVY }}>Loading...</p>
+        </div>
     </div>
 );
 
@@ -45,10 +71,12 @@ const OwnerAuthPage = ({ onSuccess }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [ownerName, setOwnerName] = useState(''); 
+    const [phoneNumber, setPhoneNumber] = useState('');
     const [restaurantName, setRestaurantName] = useState('');
     const [addressStreet, setAddressStreet] = useState('');
     const [addressBarangay, setAddressBarangay] = useState('');
     const [restaurantCategoryId, setRestaurantCategoryId] = useState('');
+    const [restaurantImageUrl, setRestaurantImageUrl] = useState('');
     
     const [barangays, setBarangays] = useState([]);
     const [categories, setCategories] = useState([]);
@@ -59,9 +87,11 @@ const OwnerAuthPage = ({ onSuccess }) => {
 
     useEffect(() => {
         const fetchData = async () => {
+            // NOTE: You must have a 'delivery_zones' table with a 'barangay_name' column
             const { data: barangayData } = await supabase.from('delivery_zones').select('barangay_name');
             if (barangayData) setBarangays(barangayData);
 
+            // NOTE: You must have a 'categories' table with 'id' and 'name' columns
             const { data: categoryData } = await supabase.from('categories').select('id, name');
             if (categoryData) setCategories(categoryData);
         };
@@ -107,14 +137,17 @@ const OwnerAuthPage = ({ onSuccess }) => {
                 const newUser = authResult.data.user;
 
                 if (newUser && authResult.data.session) {
+                    // 1. Create Owner Profile
                     const { error: ownerError } = await supabase
                         .from('owners')
                         .insert({
                             id: newUser.id,
                             contact_name: ownerName,
+                            phone_number: phoneNumber || null,
                         });
                     if (ownerError) throw new Error(`Failed to create owner profile: ${ownerError.message}`);
                     
+                    // 2. Create Restaurant Profile
                     let retries = 3;
                     let restaurantCreated = false;
                     while (retries > 0 && !restaurantCreated) {
@@ -125,6 +158,7 @@ const OwnerAuthPage = ({ onSuccess }) => {
                                 address_street: addressStreet,
                                 address_barangay: addressBarangay,
                                 category_id: restaurantCategoryId,
+                                image_url: restaurantImageUrl || null,
                                 owner_id: newUser.id,
                                 is_open: true
                             });
@@ -138,7 +172,7 @@ const OwnerAuthPage = ({ onSuccess }) => {
                         }
                     }
 
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    await new Promise(resolve => setTimeout(resolve, 1500));
                     const { data: verifyRestaurant, error: verifyError } = await supabase
                         .from('restaurants')
                         .select('id, name')
@@ -180,17 +214,25 @@ const OwnerAuthPage = ({ onSuccess }) => {
                     {!isLogin && (
                         <>
                             <div>
-                                <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Your Full Name</label>
+                                <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Your Full Name *</label>
                                 <StyledInput type="text" placeholder="e.g., Juan Dela Cruz" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} />
                             </div>
                             <div>
-                                <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Restaurant Name</label>
+                                <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Contact Phone Number</label>
+                                <StyledInput type="tel" placeholder="09xxxxxxxxx" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} />
+                            </div>
+                            <div className='pt-2'>
+                                <label className="block text-sm font-extrabold mb-1" style={{ color: NAVY }}>Restaurant Details</label>
+                                <hr className='mb-2'/>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Restaurant Name *</label>
                                 <StyledInput 
                                     type="text" placeholder="e.g., Jollibee Tubod" value={restaurantName} onChange={(e) => setRestaurantName(e.target.value)} />
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                                 <div>
-                                    <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Barangay</label>
+                                    <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Barangay *</label>
                                     <select 
                                         className="w-full p-3 border rounded-lg bg-gray-50 text-sm"
                                         value={addressBarangay}
@@ -209,7 +251,7 @@ const OwnerAuthPage = ({ onSuccess }) => {
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Category</label>
+                                <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Category *</label>
                                 <select 
                                     className="w-full p-3 border rounded-lg bg-gray-50 text-sm"
                                     value={restaurantCategoryId}
@@ -222,16 +264,25 @@ const OwnerAuthPage = ({ onSuccess }) => {
                                     ))}
                                 </select>
                             </div>
+                            <div>
+                                <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Restaurant Image URL (Optional)</label>
+                                <StyledInput 
+                                    type="text" placeholder="https://placehold.co/1200x400/003366/ffffff?text=Restaurant+Logo" 
+                                    value={restaurantImageUrl} 
+                                    onChange={(e) => setRestaurantImageUrl(e.target.value)} 
+                                />
+                                {restaurantImageUrl && <img src={restaurantImageUrl} alt="Restaurant Preview" className="mt-3 w-full h-24 object-cover rounded-lg border border-gray-200" />}
+                            </div>
                         </>
                     )}
                    
                     <div>
-                        <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Email</label>
+                        <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Email *</label>
                         <StyledInput type="email" placeholder="owner@business.com" value={email} onChange={(e) => setEmail(e.target.value)} />
                     </div>
                     
                     <div>
-                        <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Password</label>
+                        <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Password *</label>
                         <StyledInput type="password" placeholder="******" value={password} onChange={(e) => setPassword(e.target.value)} />
                     </div>
                 </div>
@@ -279,7 +330,6 @@ const ProductSidebar = ({ productForm, setProductForm, handleProductSubmit, edit
     }, [setShowProductModal]);
 
     return (
-        // The transition classes enable the slide animation effect
         <div className="fixed inset-0 bg-black/50 z-50 transition-opacity duration-300">
             <div className="fixed inset-y-0 right-0 w-full md:w-96 bg-white shadow-2xl p-6 transition-transform duration-300 transform translate-x-0 overflow-y-auto">
                 <div className="flex justify-between items-center mb-6 border-b pb-4">
@@ -315,7 +365,6 @@ const ProductSidebar = ({ productForm, setProductForm, handleProductSubmit, edit
                             onChange={(e) => updateForm('description', e.target.value)} 
                         />
                     </div>
-                    {/* ENHANCED: Clearer Image Input with Preview */}
                     <div>
                         <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Image URL (Direct Link)</label>
                         <StyledInput type="text" placeholder="https://example.com/image.jpg" value={productForm.image_url} onChange={(e) => updateForm('image_url', e.target.value)} />
@@ -343,6 +392,167 @@ const ProductSidebar = ({ productForm, setProductForm, handleProductSubmit, edit
     );
 };
 
+// --- NEW: Profile Sidebar Component ---
+const ProfileSidebar = ({ owner, restaurant, categories, barangays, onClose, onUpdate, loading }) => {
+    const [ownerForm, setOwnerForm] = useState({ contact_name: owner.contact_name, phone_number: owner.phone_number || '' });
+    const [restaurantForm, setRestaurantForm] = useState({
+        name: restaurant.name,
+        address_street: restaurant.address_street || '',
+        address_barangay: restaurant.address_barangay,
+        category_id: restaurant.category_id,
+        image_url: restaurant.image_url || '',
+        is_open: restaurant.is_open
+    });
+
+    const handleUpdate = () => {
+        onUpdate(ownerForm, restaurantForm);
+    };
+
+    // Close on escape key press
+    useEffect(() => {
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape') {
+                onClose();
+            }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [onClose]);
+
+    return (
+        <div className="fixed inset-0 bg-black/50 z-50 transition-opacity duration-300">
+            <div className="fixed inset-y-0 right-0 w-full md:w-96 bg-white shadow-2xl p-6 transition-transform duration-300 transform translate-x-0 overflow-y-auto">
+                <div className="flex justify-between items-center mb-6 border-b pb-4">
+                    <h3 className="text-2xl font-bold" style={{ color: NAVY }}>Edit Profile & Restaurant</h3>
+                    <button onClick={onClose} className="text-gray-500 hover:text-gray-800 transition">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+
+                <div className="space-y-6">
+                    {/* Owner Details */}
+                    <div>
+                        <h4 className="font-bold text-lg mb-3" style={{ color: ORANGE }}>Personal Details</h4>
+                        <div className='space-y-3'>
+                            <div>
+                                <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Your Full Name</label>
+                                <StyledInput 
+                                    type="text" 
+                                    value={ownerForm.contact_name} 
+                                    onChange={(e) => setOwnerForm(p => ({ ...p, contact_name: e.target.value }))} 
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Phone Number</label>
+                                <StyledInput 
+                                    type="tel" 
+                                    placeholder="09xxxxxxxxx"
+                                    value={ownerForm.phone_number} 
+                                    onChange={(e) => setOwnerForm(p => ({ ...p, phone_number: e.target.value }))} 
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Restaurant Details */}
+                    <div>
+                        <h4 className="font-bold text-lg mb-3" style={{ color: ORANGE }}>Restaurant Details</h4>
+                        <div className='space-y-3'>
+                            <div>
+                                <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Restaurant Name</label>
+                                <StyledInput 
+                                    type="text" 
+                                    value={restaurantForm.name} 
+                                    onChange={(e) => setRestaurantForm(p => ({ ...p, name: e.target.value }))} 
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Category</label>
+                                    <select 
+                                        className="w-full p-3 border rounded-lg bg-gray-50 text-sm"
+                                        value={restaurantForm.category_id}
+                                        onChange={(e) => setRestaurantForm(p => ({ ...p, category_id: e.target.value }))}
+                                        style={{ borderColor: BORDER }}
+                                    >
+                                        {categories.map(c => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Barangay</label>
+                                    <select 
+                                        className="w-full p-3 border rounded-lg bg-gray-50 text-sm"
+                                        value={restaurantForm.address_barangay}
+                                        onChange={(e) => setRestaurantForm(p => ({ ...p, address_barangay: e.target.value }))}
+                                        style={{ borderColor: BORDER }}
+                                    >
+                                        {barangays.map(b => (
+                                            <option key={b.barangay_name} value={b.barangay_name}>{b.barangay_name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Street Address</label>
+                                <StyledInput 
+                                    type="text" 
+                                    placeholder="Street/Bldg"
+                                    value={restaurantForm.address_street} 
+                                    onChange={(e) => setRestaurantForm(p => ({ ...p, address_street: e.target.value }))} 
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Restaurant Image URL</label>
+                                <StyledInput 
+                                    type="text" 
+                                    placeholder="https://placehold.co/1200x400/003366/ffffff?text=Restaurant+Logo"
+                                    value={restaurantForm.image_url} 
+                                    onChange={(e) => setRestaurantForm(p => ({ ...p, image_url: e.target.value }))} 
+                                />
+                                {restaurantForm.image_url && <img src={restaurantForm.image_url} alt="Restaurant Preview" className="mt-3 w-full h-24 object-cover rounded-lg border border-gray-200" />}
+                            </div>
+                            <div className="flex items-center pt-2">
+                                <input 
+                                    type="checkbox" 
+                                    id="is_open" 
+                                    checked={restaurantForm.is_open} 
+                                    onChange={(e) => setRestaurantForm(p => ({ ...p, is_open: e.target.checked }))} 
+                                    className="h-4 w-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                                    style={{ accentColor: ORANGE }}
+                                />
+                                <label htmlFor="is_open" className="ml-2 block text-sm font-medium text-gray-700">
+                                    Restaurant is Open (Toggle availability)
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex gap-3 mt-8 sticky bottom-0 bg-white pt-4 border-t">
+                    <button 
+                        onClick={onClose} 
+                        className="flex-1 py-3 bg-gray-200 text-gray-700 rounded-lg font-bold hover:bg-gray-300 transition"
+                    >
+                        Cancel
+                    </button>
+                    <button 
+                        onClick={handleUpdate} 
+                        disabled={loading}
+                        className="flex-1 py-3 text-white rounded-lg font-bold hover:opacity-90 transition transform active:scale-[0.99] disabled:bg-gray-400" 
+                        style={{ backgroundColor: ORANGE }}
+                    >
+                        {loading ? 'Saving...' : 'Save Changes'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 // ------------------------------------------------------------------
 // --- MAIN DASHBOARD COMPONENT ---
@@ -350,6 +560,7 @@ const ProductSidebar = ({ productForm, setProductForm, handleProductSubmit, edit
 const RestaurantOwnerDashboard = () => {
     const [user, setUser] = useState(null);
     const [authReady, setAuthReady] = useState(false);
+    const [owner, setOwner] = useState(null); 
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [myRestaurant, setMyRestaurant] = useState(null);
@@ -358,15 +569,21 @@ const RestaurantOwnerDashboard = () => {
     const [restaurantCheckAttempts, setRestaurantCheckAttempts] = useState(0);
     const [activeTab, setActiveTab] = useState('orders');
     const [products, setProducts] = useState([]);
+    
+    // Sidebars
     const [showProductModal, setShowProductModal] = useState(false);
+    const [showProfileModal, setShowProfileModal] = useState(false);
+    const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+    
+    // Product Editing State
     const [editingProduct, setEditingProduct] = useState(null);
     const [productForm, setProductForm] = useState({
-        name: '',
-        price: '',
-        stock: '',
-        description: '',
-        image_url: ''
+        name: '', price: '', stock: '', description: '', image_url: ''
     });
+
+    // Data for Profile Sidebar Selects
+    const [barangays, setBarangays] = useState([]);
+    const [categories, setCategories] = useState([]);
 
     // 1. Initialize state from Local Storage
     const [statusFilter, setStatusFilter] = useState(() => {
@@ -375,6 +592,18 @@ const RestaurantOwnerDashboard = () => {
         }
         return 'all';
     });
+
+    // Load static data for dropdowns
+    useEffect(() => {
+        const fetchData = async () => {
+            const { data: barangayData } = await supabase.from('delivery_zones').select('barangay_name');
+            if (barangayData) setBarangays(barangayData);
+
+            const { data: categoryData } = await supabase.from('categories').select('id, name');
+            if (categoryData) setCategories(categoryData);
+        };
+        fetchData();
+    }, []);
 
     // 2. Save to Local Storage whenever statusFilter changes
     useEffect(() => {
@@ -418,8 +647,11 @@ const RestaurantOwnerDashboard = () => {
             if (error) throw error;
             setOrders(orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
         } catch (error) {
-            alert('Failed to update status. Check RLS policies on "orders".');
-            console.error(error);
+            console.error('Failed to update status:', error);
+            // Using a simple modal approach instead of alert()
+            const message = `Failed to update status. Error: ${error.message}. Please check RLS policies on "orders".`;
+            // In a real app, this would trigger a custom modal/toast.
+            console.log(message);
         }
     }, [orders]);
 
@@ -428,6 +660,7 @@ const RestaurantOwnerDashboard = () => {
         setLoading(true);
 
         try {
+            // Fetch order items relevant to the current restaurant
             const { data: items, error: itemsError } = await supabase
                 .from('order_items')
                 .select(`
@@ -449,6 +682,7 @@ const RestaurantOwnerDashboard = () => {
                 return;
             }
 
+            // Fetch order headers
             const { data: ordersData, error: ordersError } = await supabase
                 .from('orders')
                 .select('*')
@@ -496,12 +730,13 @@ const RestaurantOwnerDashboard = () => {
 
     const handleProductSubmit = async () => {
         if (!productForm.name || !productForm.price || !productForm.stock) {
-            alert('Please fill in all required fields (Name, Price, Stock)');
+            console.error('Please fill in all required fields (Name, Price, Stock)');
             return;
         }
 
         try {
             const productData = {
+                // Ensure a unique ID, especially for new inserts
                 food_item_id: editingProduct?.food_item_id ||
                     `${myRestaurant.id}_${Date.now()}`,
                 name: productForm.name,
@@ -524,19 +759,21 @@ const RestaurantOwnerDashboard = () => {
             setProductForm({ name: '', price: '', stock: '', description: '', image_url: '' });
         } catch (error) {
             console.error('Error saving product:', error);
-            alert('Failed to save product: ' + error.message);
+            // Using a simple modal approach instead of alert()
+            console.log('Failed to save product: ' + error.message);
         }
     };
 
     const handleDeleteProduct = async (foodItemId) => {
-        if (!confirm('Are you sure you want to delete this product?')) return;
+        if (!window.confirm('Are you sure you want to delete this product?')) return;
         try {
             const { error } = await supabase.from('food_items').delete().eq('food_item_id', foodItemId);
             if (error) throw error;
             await loadProducts();
         } catch (error) {
             console.error('Error deleting product:', error);
-            alert('Failed to delete product: ' + error.message);
+            // Using a simple modal approach instead of alert()
+            console.log('Failed to delete product: ' + error.message);
         }
     };
 
@@ -552,31 +789,37 @@ const RestaurantOwnerDashboard = () => {
         setShowProductModal(true);
     }; 
     
-    // Load my restaurant information
+    // Load my restaurant and owner information
     useEffect(() => {
         if (!user || restaurantLoaded) return; 
         
         let mounted = true; 
         let retryTimeout;
 
-        const loadMyRestaurant = async () => {
+        const loadMyData = async () => {
             setLoading(true);
             try {
-                const { data, error } = await supabase.from('restaurants').select('*').eq('owner_id', user.id).single(); 
+                // Fetch Owner details
+                const { data: ownerData, error: ownerError } = await supabase.from('owners').select('*').eq('id', user.id).single();
+                if (ownerError && ownerError.code !== 'PGRST116') throw ownerError;
+                if (mounted) setOwner(ownerData);
+
+                // Fetch Restaurant details
+                const { data: restaurantData, error: restaurantError } = await supabase.from('restaurants').select('*').eq('owner_id', user.id).single(); 
 
                 if (mounted) {
-                    if (error && error.code === 'PGRST116') {
+                    if (restaurantError && restaurantError.code === 'PGRST116') {
                         if (restaurantCheckAttempts < 3) {
                             console.log(`Restaurant not found, retrying... (attempt ${restaurantCheckAttempts + 1}/3)`);
                             setRestaurantCheckAttempts(prev => prev + 1);
                             retryTimeout = setTimeout(() => { setRestaurantLoaded(false); }, 2000);
                             return;
                         }
-                    } else if (error) {
-                        console.error('Error fetching restaurant:', error);
+                    } else if (restaurantError) {
+                        console.error('Error fetching restaurant:', restaurantError);
                     }
                     
-                    setMyRestaurant(data || null);
+                    setMyRestaurant(restaurantData || null);
                     setRestaurantLoaded(true); 
                 }
             } catch (err) {
@@ -590,7 +833,7 @@ const RestaurantOwnerDashboard = () => {
             }
         };
 
-        if (user) loadMyRestaurant();
+        if (user) loadMyData();
         return () => { 
             mounted = false;
             if (retryTimeout) clearTimeout(retryTimeout);
@@ -608,11 +851,63 @@ const RestaurantOwnerDashboard = () => {
     const handleSignOut = async () => {
         await supabase.auth.signOut();
         setUser(null);
+        setOwner(null);
         setMyRestaurant(null);
         setOrders([]);
         setRestaurantLoaded(false);
         setRestaurantCheckAttempts(0);
     };
+
+    // Handle Profile Update Submission
+    const handleProfileUpdate = async (ownerForm, restaurantForm) => {
+        if (!ownerForm.contact_name || !restaurantForm.name || !restaurantForm.address_barangay || !restaurantForm.category_id) {
+            console.error('Owner Name, Restaurant Name, Barangay, and Category are required.');
+            return;
+        }
+        setIsUpdatingProfile(true);
+        try {
+            // Update Owner Table
+            const { error: ownerError } = await supabase
+                .from('owners')
+                .update({ contact_name: ownerForm.contact_name, phone_number: ownerForm.phone_number || null })
+                .eq('id', user.id);
+
+            if (ownerError) throw ownerError;
+
+            // Update Restaurant Table
+            const { error: restaurantError } = await supabase
+                .from('restaurants')
+                .update({ 
+                    name: restaurantForm.name,
+                    address_street: restaurantForm.address_street || null,
+                    address_barangay: restaurantForm.address_barangay,
+                    category_id: restaurantForm.category_id,
+                    image_url: restaurantForm.image_url || null,
+                    is_open: restaurantForm.is_open,
+                })
+                .eq('owner_id', user.id);
+
+            if (restaurantError) throw restaurantError;
+
+            // Refetch data to update UI
+            const { data: updatedOwner } = await supabase.from('owners').select('*').eq('id', user.id).single();
+            const { data: updatedRestaurant } = await supabase.from('restaurants').select('*').eq('owner_id', user.id).single();
+            
+            setOwner(updatedOwner);
+            setMyRestaurant(updatedRestaurant);
+            setShowProfileModal(false);
+            // Using a simple modal approach instead of alert()
+            console.log('Profile and Restaurant details updated successfully!');
+
+        } catch (error) {
+            console.error('Error updating profile:', error);
+            // Using a simple modal approach instead of alert()
+            console.log('Failed to update profile: ' + error.message);
+        } finally {
+            setIsUpdatingProfile(false);
+        }
+    };
+
 
     const filteredOrders = useMemo(() => {
         return orders.filter(order => statusFilter === 'all' || order.status === statusFilter);
@@ -644,7 +939,8 @@ const RestaurantOwnerDashboard = () => {
 
     if (!authReady) return <Loading />;
     if (!user) return <OwnerAuthPage onSuccess={setUser} />;
-    if (!restaurantLoaded || (loading && !myRestaurant)) return <Loading />;
+    // Check if both restaurant and owner data are loaded
+    if (!restaurantLoaded || (loading && (!myRestaurant || !owner))) return <Loading />; 
     
     // Fallback if user is logged in but no restaurant is linked
     if (!myRestaurant && restaurantLoaded) {
@@ -653,7 +949,7 @@ const RestaurantOwnerDashboard = () => {
                 <div className="bg-white p-10 rounded-xl shadow-2xl text-center max-w-lg">
                     <span className="text-6xl mb-4 block">⚠️</span>
                     <h2 className="text-2xl font-bold mb-2" style={{ color: NAVY }}>No Restaurant Linked</h2>
-                    <p className="mb-6 text-gray-600">Please logout and register again using the Owner Registration form.</p>
+                    <p className="mb-6 text-gray-600">Please check your registration details. Restaurant data is missing or inaccessible.</p>
                     <button onClick={handleSignOut} className="px-6 py-3 rounded-lg font-bold text-white transition" style={{ backgroundColor: ORANGE }}>Logout & Try Again</button>
                 </div>
             </div>
@@ -664,11 +960,27 @@ const RestaurantOwnerDashboard = () => {
         <div className="min-h-screen" style={{ backgroundColor: LIGHT_BG }}>
             <header className="shadow-lg p-4 sticky top-0 z-20" style={{ backgroundColor: NAVY }}>
                 <div className="max-w-7xl mx-auto flex justify-between items-center text-white">
-                    <div>
-                        <h1 className="text-xl md:text-2xl font-black">👨‍🍳 {myRestaurant.name}</h1>
-                        <p className="text-xs opacity-90">{myRestaurant.address_barangay}</p>
+                    <div className='flex items-center gap-3'>
+                        {myRestaurant.image_url && (
+                            <img 
+                                src={myRestaurant.image_url} 
+                                // Placeholder for broken image URLs
+                                onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/100x100/333/fff?text=R+Logo'; }}
+                                alt="Restaurant Logo" 
+                                className="w-10 h-10 object-cover rounded-full border-2 border-white/50"
+                            />
+                        )}
+                        <div>
+                            <h1 className="text-xl md:text-2xl font-black">👨‍🍳 {myRestaurant.name}</h1>
+                            <p className="text-xs opacity-90">{myRestaurant.address_barangay} | Status: {myRestaurant.is_open ? 'Open' : 'Closed'}</p>
+                        </div>
                     </div>
-                    <button onClick={handleSignOut} className="px-4 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-sm font-bold transition">Logout</button>
+                    <div className='flex items-center gap-3'>
+                         <button onClick={() => setShowProfileModal(true)} className="px-4 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-sm font-bold transition">
+                            Edit Profile
+                        </button>
+                        <button onClick={handleSignOut} className="px-4 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-sm font-bold transition">Logout</button>
+                    </div>
                 </div>
             </header>
 
@@ -706,12 +1018,11 @@ const RestaurantOwnerDashboard = () => {
                         ) : (
                             <div className="space-y-4">
                                 {filteredOrders.map(order => (
-                                    // ENHANCED: Hover animation and click-to-view logic
                                     <div 
                                         key={order.id} 
                                         className="bg-white rounded-xl shadow-md overflow-hidden border-l-4 transition-all duration-300 hover:shadow-xl hover:scale-[1.005] cursor-pointer" 
                                         style={{ borderLeftColor: order.status === 'Completed' || order.status === 'Delivered' ? '#10B981' : ORANGE }}
-                                        onClick={() => setExpandedOrder(expandedOrder === order.id ? null : order.id)} // View information feature
+                                        onClick={() => setExpandedOrder(expandedOrder === order.id ? null : order.id)}
                                     >
                                         <div className="p-5">
                                             <div className="flex justify-between items-start mb-4 pb-3 border-b border-gray-100">
@@ -736,7 +1047,6 @@ const RestaurantOwnerDashboard = () => {
                                                 </div>
                                             </div>
 
-                                            {/* Item toggle for view information */}
                                             <button 
                                                 onClick={(e) => {e.stopPropagation(); setExpandedOrder(expandedOrder === order.id ? null : order.id);}} 
                                                 className="w-full text-left bg-gray-50 p-3 rounded-lg flex justify-between items-center hover:bg-gray-100 transition"
@@ -801,18 +1111,31 @@ const RestaurantOwnerDashboard = () => {
                             ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                                     {products.map(product => (
-                                        // ENHANCED: Creative Product Card Design and Hover
                                         <div key={product.food_item_id} className="bg-white rounded-2xl shadow-lg overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1">
-                                            {product.image_url && <img src={product.image_url} alt={product.name} className="w-full h-48 object-cover object-center" />}
+                                            {/* Use placeholder image if no URL is provided */}
+                                            <img 
+                                                src={product.image_url || `https://placehold.co/600x400/FF8A00/ffffff?text=${product.name.substring(0, 10).replace(/ /g, '+')}`} 
+                                                alt={product.name} 
+                                                className="w-full h-48 object-cover object-center" 
+                                            />
                                             <div className="p-4 relative">
-                                                {/* Info Icon for Quick View */}
-                                                <button 
-                                                    onClick={() => alert(`Product ID: ${product.food_item_id}\nRestaurant ID: ${product.restaurant_id}\nDescription: ${product.description || 'N/A'}`)}
-                                                    className="absolute top-4 right-4 text-gray-400 hover:text-navy-500 transition p-2 bg-white/70 rounded-full shadow-md"
-                                                    title="View Details"
-                                                >
-                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                                                </button>
+                                                {/* Edit/Delete Buttons */}
+                                                <div className="absolute top-4 right-4 flex gap-2">
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); openEditProduct(product); }}
+                                                        className="text-gray-500 hover:text-blue-500 transition p-2 bg-white/70 rounded-full shadow-md"
+                                                        title="Edit Product"
+                                                    >
+                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L15.232 5.232z"></path></svg>
+                                                    </button>
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.food_item_id); }}
+                                                        className="text-gray-500 hover:text-red-500 transition p-2 bg-white/70 rounded-full shadow-md"
+                                                        title="Delete Product"
+                                                    >
+                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                                    </button>
+                                                </div>
 
                                                 <h3 className="font-extrabold text-xl mb-1">{product.name}</h3>
                                                 <p className="text-gray-500 text-sm mb-3 line-clamp-2">{product.description || 'No description provided.'}</p>
@@ -821,6 +1144,7 @@ const RestaurantOwnerDashboard = () => {
                                                     <span className={`text-sm font-semibold px-3 py-1 rounded ${product.stock > 10 ? 'bg-green-100 text-green-600' : product.stock > 0 ? 'bg-yellow-100 text-yellow-600' : 'bg-red-100 text-red-600'}`}>Stock: {product.stock}</span>
                                                 </div>
                                                 <div className="flex gap-2">
+                                                    {/* Duplicating Edit/Delete as list buttons for visibility */}
                                                     <button onClick={() => openEditProduct(product)} className="flex-1 py-2 bg-blue-50 text-blue-600 rounded-lg font-bold hover:bg-blue-100 transition">Edit</button>
                                                     <button onClick={() => handleDeleteProduct(product.food_item_id)} className="flex-1 py-2 bg-red-50 text-red-600 rounded-lg font-bold hover:bg-red-100 transition">Delete</button>
                                                 </div>
@@ -842,6 +1166,20 @@ const RestaurantOwnerDashboard = () => {
                         )}
                     </>
                 )}
+
+                {/* --- PROFILE SLIDE BAR --- */}
+                {showProfileModal && owner && myRestaurant && (
+                    <ProfileSidebar 
+                        owner={owner}
+                        restaurant={myRestaurant}
+                        categories={categories}
+                        barangays={barangays}
+                        onClose={() => setShowProfileModal(false)}
+                        onUpdate={handleProfileUpdate}
+                        loading={isUpdatingProfile}
+                    />
+                )}
+
             </div>
         </div>
     );

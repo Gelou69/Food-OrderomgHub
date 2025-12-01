@@ -280,6 +280,16 @@ const RestaurantOwnerDashboard = () => {
         image_url: ''
     });
 
+    // Restaurant edit / image upload
+    const [showRestaurantModal, setShowRestaurantModal] = useState(false);
+    const [restaurantForm, setRestaurantForm] = useState({
+        name: '',
+        address_street: '',
+        address_barangay: '',
+        imageFile: null,
+        imagePreview: ''
+    });
+
     // --- FIX STARTS HERE ---
     // 1. Initialize state from Local Storage
     const [statusFilter, setStatusFilter] = useState(() => {
@@ -463,6 +473,56 @@ const RestaurantOwnerDashboard = () => {
         setShowProductModal(true);
     }; 
 
+    // --- Restaurant image upload handlers ---
+    const handleRestaurantImageChange = (e) => {
+        const file = e.target.files?.[0] || null;
+        if (!file) return;
+        setRestaurantForm(prev => ({ ...prev, imageFile: file, imagePreview: URL.createObjectURL(file) }));
+    };
+
+    const uploadRestaurantImage = async (file) => {
+        if (!file) return null;
+        try {
+            const path = `${myRestaurant.id}/${Date.now()}_${file.name}`;
+            const { error: uploadError } = await supabase.storage.from('restaurant-images').upload(path, file, { upsert: true });
+            if (uploadError) throw uploadError;
+            const { data } = supabase.storage.from('restaurant-images').getPublicUrl(path);
+            return data?.publicUrl || null;
+        } catch (err) {
+            console.error('Upload error:', err);
+            throw err;
+        }
+    };
+
+    const handleSaveRestaurant = async () => {
+        if (!myRestaurant) return;
+        setLoading(true);
+        try {
+            let imageUrl = restaurantForm.imagePreview || myRestaurant.image_url || null;
+            if (restaurantForm.imageFile) {
+                imageUrl = await uploadRestaurantImage(restaurantForm.imageFile);
+            }
+
+            const { error } = await supabase.from('restaurants').update({
+                name: restaurantForm.name,
+                address_street: restaurantForm.address_street,
+                address_barangay: restaurantForm.address_barangay,
+                image_url: imageUrl
+            }).eq('id', myRestaurant.id);
+
+            if (error) throw error;
+
+            const { data: updated } = await supabase.from('restaurants').select('*').eq('id', myRestaurant.id).single();
+            setMyRestaurant(updated);
+            setShowRestaurantModal(false);
+        } catch (err) {
+            console.error('Failed to save restaurant:', err);
+            alert('Failed to save restaurant: ' + (err.message || err));
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
         if (!user || restaurantLoaded) return; 
         
@@ -487,6 +547,16 @@ const RestaurantOwnerDashboard = () => {
                     }
                     
                     setMyRestaurant(data || null);
+                    // initialize restaurant form with current data
+                    if (data) {
+                        setRestaurantForm(prev => ({
+                            ...prev,
+                            name: data.name || '',
+                            address_street: data.address_street || '',
+                            address_barangay: data.address_barangay || '',
+                            imagePreview: data.image_url || ''
+                        }));
+                    }
                     setRestaurantLoaded(true); 
                 }
             } catch (err) {
@@ -573,13 +643,58 @@ const RestaurantOwnerDashboard = () => {
         <div className="min-h-screen" style={{ backgroundColor: LIGHT_BG }}>
             <header className="shadow-lg p-4 sticky top-0 z-20" style={{ backgroundColor: NAVY }}>
                 <div className="max-w-7xl mx-auto flex justify-between items-center text-white">
-                    <div>
-                        <h1 className="text-xl md:text-2xl font-black">👨‍🍳 {myRestaurant.name}</h1>
-                        <p className="text-xs opacity-90">{myRestaurant.address_barangay}</p>
+                    <div className="flex items-center gap-4">
+                        {myRestaurant?.image_url ? (
+                            <img src={myRestaurant.image_url} alt={myRestaurant.name} className="w-14 h-14 object-cover rounded-lg border" />
+                        ) : (
+                            <div className="w-14 h-14 rounded-lg bg-white/10 flex items-center justify-center text-2xl">🍴</div>
+                        )}
+                        <div>
+                            <h1 className="text-xl md:text-2xl font-black">👨‍🍳 {myRestaurant.name}</h1>
+                            <p className="text-xs opacity-90">{myRestaurant.address_barangay}</p>
+                        </div>
                     </div>
-                    <button onClick={handleSignOut} className="px-4 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-sm font-bold">Logout</button>
+                    <div className="flex items-center gap-3">
+                        <button onClick={() => setShowRestaurantModal(true)} className="px-3 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-sm font-bold">Edit</button>
+                        <button onClick={handleSignOut} className="px-4 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-sm font-bold">Logout</button>
+                    </div>
                 </div>
             </header>
+
+            {showRestaurantModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+                        <h3 className="text-2xl font-bold mb-4" style={{ color: NAVY }}>Edit Restaurant</h3>
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Restaurant Name</label>
+                                <StyledInput type="text" value={restaurantForm.name} onChange={(e) => setRestaurantForm(prev => ({ ...prev, name: e.target.value }))} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Street</label>
+                                <StyledInput type="text" value={restaurantForm.address_street} onChange={(e) => setRestaurantForm(prev => ({ ...prev, address_street: e.target.value }))} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Barangay</label>
+                                <StyledInput type="text" value={restaurantForm.address_barangay} onChange={(e) => setRestaurantForm(prev => ({ ...prev, address_barangay: e.target.value }))} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold mb-1" style={{ color: NAVY }}>Restaurant Image</label>
+                                <input type="file" accept="image/*" onChange={handleRestaurantImageChange} />
+                                {restaurantForm.imagePreview && (
+                                    <div className="mt-2">
+                                        <img src={restaurantForm.imagePreview} alt="preview" className="w-full h-48 object-cover rounded-lg" />
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex gap-3 mt-6">
+                            <button onClick={() => { setShowRestaurantModal(false); }} className="flex-1 py-3 bg-gray-200 text-gray-700 rounded-lg font-bold hover:bg-gray-300">Cancel</button>
+                            <button onClick={handleSaveRestaurant} className="flex-1 py-3 text-white rounded-lg font-bold hover:opacity-90 transition" style={{ backgroundColor: ORANGE }}>Save</button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="max-w-7xl mx-auto px-4 md:px-6">
                 <div className="flex gap-4 mt-6 border-b border-gray-200">

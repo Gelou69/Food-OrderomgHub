@@ -340,6 +340,11 @@ const RestaurantOwnerDashboard = () => {
         image_url: ''
     });
 
+    // Restaurant profile & owner details
+    const [showProfileSidebar, setShowProfileSidebar] = useState(false);
+    const [profileForm, setProfileForm] = useState({ name: '', address_street: '', address_barangay: '', image_url: '' });
+    const [ownerProfile, setOwnerProfile] = useState(null);
+
     // --- FIX STARTS HERE ---
     // 1. Initialize state from Local Storage
     const [statusFilter, setStatusFilter] = useState(() => {

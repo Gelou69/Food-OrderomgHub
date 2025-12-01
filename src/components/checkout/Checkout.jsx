@@ -88,12 +88,60 @@ export const Checkout = ({ setPage, cart, setCart, user }) => {
 
       const newOrderId = newOrder.id;
       
+      // Prepare items for DB insert (order_items schema doesn't include image_url)
       const itemData = cart.map(item => ({
         order_id: newOrderId,
-        food_item_id: item.id, 
+        food_item_id: item.id,
         name: item.name,
         price: item.price,
         quantity: item.quantity,
+      }));
+
+      // Build a display version with image URLs resolved so tracking page shows images immediately
+      const cartIds = [...new Set(cart.map(i => i.id))];
+      let foodMap = {};
+      try {
+        const { data: foods } = await supabase
+          .from('food_items')
+          .select('food_item_id, image_url')
+          .in('food_item_id', cartIds);
+        (foods || []).forEach(f => { if (f?.food_item_id) foodMap[f.food_item_id] = f.image_url; });
+      } catch (e) {
+        // ignore — we'll try to resolve from storage directly per-item below
+      }
+
+      const resolveImageUrl = async (raw) => {
+        if (!raw) return null;
+        if (typeof raw === 'object') {
+          raw = raw.url || raw.path || raw.publicUrl || raw.public_url || raw.publicURL || null;
+        }
+        if (!raw) return null;
+        raw = String(raw).trim();
+        if (/^https?:\/\//i.test(raw) || raw.startsWith('data:')) return raw;
+        raw = raw.replace(/^\/+/, '');
+        const bucketsToTry = ['food-images', 'restaurant-images'];
+        for (const bucket of bucketsToTry) {
+          try {
+            const { data } = supabase.storage.from(bucket).getPublicUrl(raw);
+            const publicUrl = data?.publicUrl || data?.publicURL || data?.public_url || data?.url;
+            if (publicUrl) return publicUrl;
+          } catch (err) {
+            // try next
+          }
+        }
+        return null;
+      };
+
+      const itemDataForDisplay = await Promise.all(cart.map(async item => {
+        const raw = foodMap[item.id] || item.image_url || item.image || null;
+        const image_url = raw ? await resolveImageUrl(raw) : null;
+        return {
+          food_item_id: item.id,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          image_url
+        };
       }));
 
       // 2. Insert Order Items
@@ -135,7 +183,7 @@ export const Checkout = ({ setPage, cart, setCart, user }) => {
       // 4. Prepare Order object for Tracking Page
       const orderForTracking = {
         ...newOrder,
-        order_items: itemData, // Attach the newly created items
+        order_items: itemDataForDisplay, // Attach the newly created items with images
         restaurant_name: restaurantName, // Attach the name
       };
 

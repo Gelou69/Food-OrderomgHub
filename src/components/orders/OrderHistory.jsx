@@ -145,7 +145,9 @@ export const OrderHistory = ({ setPage, user, setSelectedOrder }) => {
       <SectionTitle icon="🛵" title={`My Iligan Orders (${groupedOrders.length} Segments)`} />
       <div className="space-y-4">
         {/* Map over the grouped orders */}
-        {groupedOrders.map(order => (
+        {groupedOrders.map(order => {
+          const firstItem = order.order_items?.[0];
+          return (
           <div 
             // Use the new displayId for the key
             key={order.displayId} 
@@ -175,7 +177,22 @@ export const OrderHistory = ({ setPage, user, setSelectedOrder }) => {
               </div>
               <StatusPill status={order.status} size="xs" />
             </div>
-            
+
+            {/* Item preview: show first item's image and name */}
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-14 h-14 bg-gray-100 rounded overflow-hidden flex items-center justify-center">
+                {firstItem?.image_url ? (
+                  <img src={firstItem.image_url} alt={firstItem.name} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="text-xs text-gray-400">No image</div>
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="font-semibold truncate">{firstItem?.name || 'Unknown item'}</p>
+                <p className="text-xs text-gray-500">x{firstItem?.quantity || 1}</p>
+              </div>
+            </div>
+
             {/* Footer: Item Count & Total */}
             <div className='flex justify-between items-center'>
               <p className='text-sm text-gray-600 bg-gray-50 px-2 py-1 rounded-md'>

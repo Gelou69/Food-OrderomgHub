@@ -654,18 +654,51 @@ const RestaurantOwnerDashboard = () => {
     // Resolve image paths to usable public URLs.
     const resolveImageUrl = async (imgPath) => {
         if (!imgPath) return null;
-        if (typeof imgPath === 'string' && imgPath.startsWith('http')) return imgPath;
+        // Accept object shapes (e.g. { url, path, publicUrl })
+        let raw = imgPath;
+        if (typeof raw === 'object') {
+            raw = raw.url || raw.path || raw.publicUrl || raw.public_url || raw.publicURL || raw.path_with_namespace || null;
+        }
+        if (!raw) return null;
+        raw = String(raw).trim();
+
+        // If already a full URL or data URI, use it directly
+        if (/^https?:\/\//i.test(raw) || raw.startsWith('data:')) return raw;
+
+        // Normalize path (remove leading slashes)
+        raw = raw.replace(/^\/+/, '');
+
         const bucketsToTry = ['food-images', 'restaurant-images'];
         for (const bucket of bucketsToTry) {
             try {
-                const { data } = supabase.storage.from(bucket).getPublicUrl(imgPath);
-                if (data?.publicUrl) return data.publicUrl;
+                const { data } = supabase.storage.from(bucket).getPublicUrl(raw);
+                const publicUrl = data?.publicUrl || data?.publicURL || data?.public_url || data?.url;
+                if (publicUrl) return publicUrl;
             } catch (err) {
                 // ignore and try next
             }
         }
         return null;
     };
+
+    // If the restaurant record has an image path (not a full URL), resolve it once and update state
+    useEffect(() => {
+        let mounted = true;
+        (async () => {
+            if (!myRestaurant?.image_url) return;
+            const raw = myRestaurant.image_url;
+            if (typeof raw === 'string' && (/^https?:\/\//i.test(raw) || raw.startsWith('data:'))) return;
+            try {
+                const resolved = await resolveImageUrl(raw);
+                if (mounted && resolved && resolved !== raw) {
+                    setMyRestaurant(prev => ({ ...(prev || {}), image_url: resolved }));
+                }
+            } catch (e) {
+                // ignore
+            }
+        })();
+        return () => { mounted = false; };
+    }, [myRestaurant?.image_url]);
 
     if (!authReady) return <Loading />;
     if (!user) return <OwnerAuthPage onSuccess={setUser} />;

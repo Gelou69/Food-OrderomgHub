@@ -1,5 +1,5 @@
 // components/owner/RestaurantOwnerDashboard.jsx - FINAL FIXED VERSION
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { supabase } from '../../config/supabase';
 
 // --- CONSTANTS ---
@@ -96,6 +96,16 @@ const RestaurantProfileSidebar = ({ show, onClose, profileForm, setProfileForm, 
                     <button onClick={handleProfileSubmit} className="flex-1 py-3 text-white rounded-lg font-bold hover:opacity-90 transition" style={{ backgroundColor: ORANGE }}>Save Profile</button>
                 </div>
             </div>
+            {showProfileSidebar && (
+                <RestaurantProfileSidebar
+                    show={showProfileSidebar}
+                    onClose={() => setShowProfileSidebar(false)}
+                    profileForm={profileForm}
+                    setProfileForm={setProfileForm}
+                    handleProfileSubmit={handleProfileSubmit}
+                    ownerProfile={ownerProfile}
+                />
+            )}
         </div>
     );
 };
@@ -528,6 +538,26 @@ const RestaurantOwnerDashboard = () => {
         setShowProductModal(true);
     }; 
 
+    // Update restaurant profile (name, address, image_url)
+    const handleProfileSubmit = async () => {
+        if (!myRestaurant) return;
+        try {
+            const updatePayload = {
+                name: profileForm.name,
+                address_street: profileForm.address_street,
+                address_barangay: profileForm.address_barangay,
+                image_url: profileForm.image_url
+            };
+            const { data: updated, error } = await supabase.from('restaurants').update(updatePayload).eq('id', myRestaurant.id).select().single();
+            if (error) throw error;
+            setMyRestaurant(updated || myRestaurant);
+            setShowProfileSidebar(false);
+        } catch (err) {
+            console.error('Failed to update restaurant profile', err);
+            alert('Failed to save profile: ' + (err.message || err));
+        }
+    };
+
     useEffect(() => {
         if (!user || restaurantLoaded) return; 
         
@@ -552,6 +582,22 @@ const RestaurantOwnerDashboard = () => {
                     }
                     
                     setMyRestaurant(data || null);
+                    // populate profile form from restaurant row
+                    if (data) {
+                        setProfileForm({
+                            name: data.name || '',
+                            address_street: data.address_street || '',
+                            address_barangay: data.address_barangay || '',
+                            image_url: data.image_url || ''
+                        });
+                        // fetch owner profile (owners table)
+                        try {
+                            const { data: ownerData } = await supabase.from('owners').select('*').eq('id', user.id).maybeSingle();
+                            if (ownerData) setOwnerProfile(ownerData);
+                        } catch (ownerErr) {
+                            console.error('Failed to fetch owner profile', ownerErr);
+                        }
+                    }
                     setRestaurantLoaded(true); 
                 }
             } catch (err) {
@@ -638,11 +684,21 @@ const RestaurantOwnerDashboard = () => {
         <div className="min-h-screen" style={{ backgroundColor: LIGHT_BG }}>
             <header className="shadow-lg p-4 sticky top-0 z-20" style={{ backgroundColor: NAVY }}>
                 <div className="max-w-7xl mx-auto flex justify-between items-center text-white">
-                    <div>
-                        <h1 className="text-xl md:text-2xl font-black">👨‍🍳 {myRestaurant.name}</h1>
-                        <p className="text-xs opacity-90">{myRestaurant.address_barangay}</p>
+                    <div className="flex items-center gap-4">
+                        {myRestaurant?.image_url ? (
+                            <img src={myRestaurant.image_url} alt={myRestaurant.name} className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm" />
+                        ) : (
+                            <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-lg">🍽️</div>
+                        )}
+                        <div>
+                            <h1 className="text-xl md:text-2xl font-black">👨‍🍳 {myRestaurant.name}</h1>
+                            <p className="text-xs opacity-90">{myRestaurant.address_barangay}</p>
+                        </div>
                     </div>
-                    <button onClick={handleSignOut} className="px-4 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-sm font-bold">Logout</button>
+                    <div className="flex items-center gap-3">
+                        <button onClick={() => setShowProfileSidebar(true)} className="px-3 py-1 rounded-full bg-white/20 hover:bg-white/30 text-sm font-bold">Edit Profile</button>
+                        <button onClick={handleSignOut} className="px-4 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-sm font-bold">Logout</button>
+                    </div>
                 </div>
             </header>
 

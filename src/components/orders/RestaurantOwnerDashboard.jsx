@@ -352,6 +352,7 @@ const RestaurantOwnerDashboard = () => {
         setLoading(true);
 
         try {
+            // fetch order items and include food_items.image_url when possible
             const { data: items, error: itemsError } = await supabase
                 .from('order_items')
                 .select(`
@@ -359,7 +360,8 @@ const RestaurantOwnerDashboard = () => {
                     name,
                     price,
                     quantity,
-                    food_items!inner ( restaurant_id )
+                    food_item_id,
+                    food_items!inner ( restaurant_id, food_item_id, image_url )
                 `)
                 .eq('food_items.restaurant_id', myRestaurant.id);
 
@@ -379,25 +381,44 @@ const RestaurantOwnerDashboard = () => {
                 .in('id', uniqueOrderIds)
                 .order('created_at', { ascending: false });
             if (ordersError) throw ordersError;
+            // helper to resolve image URLs (handles full URLs or storage paths)
+            const resolveImageUrl = async (imgPath) => {
+                if (!imgPath) return null;
+                if (imgPath.startsWith('http')) return imgPath;
+                const bucketsToTry = ['food-images', 'restaurant-images'];
+                for (const bucket of bucketsToTry) {
+                    try {
+                        const { data } = supabase.storage.from(bucket).getPublicUrl(imgPath);
+                        if (data?.publicUrl) return data.publicUrl;
+                    } catch (err) {
+                        // ignore and try next
+                    }
+                }
+                return null;
+            };
 
-            const fullOrders = ordersData.map(order => {
-                const relevantItems = items
-                    .filter(i => i.order_id === order.id)
-                    .map(i => ({
+            const fullOrders = await Promise.all(ordersData.map(async order => {
+                const relevantItemsRaw = items.filter(i => i.order_id === order.id);
+                const relevantItems = await Promise.all(relevantItemsRaw.map(async i => {
+                    const rawImage = i.food_items?.image_url || i.image_url || null;
+                    const image_url = rawImage ? await resolveImageUrl(rawImage) : null;
+                    return {
                         food_item_id: i.food_item_id,
                         name: i.name,
                         price: i.price,
-                        quantity: i.quantity
-                    }));
-          
+                        quantity: i.quantity,
+                        image_url
+                    };
+                }));
+
                 const restaurantSubtotal = relevantItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-                
-                return { 
-                    ...order, 
-                    order_items: relevantItems, 
-                    restaurant_subtotal: restaurantSubtotal.toFixed(2) 
+
+                return {
+                    ...order,
+                    order_items: relevantItems,
+                    restaurant_subtotal: restaurantSubtotal.toFixed(2)
                 };
-            });
+            }));
             setOrders(fullOrders);
         } catch (error) {
             console.error('Error loading orders:', error);
@@ -778,7 +799,19 @@ const RestaurantOwnerDashboard = () => {
                                                 <div className="mt-2 bg-gray-50 rounded-lg p-3 space-y-2 border border-gray-100">
                                                     {order.order_items.map((item, idx) => (
                                                         <div key={item.food_item_id + idx} className="flex justify-between items-center text-sm">
-                                                            <div className="flex items-center gap-2"><span className="bg-white px-2 py-0.5 rounded border font-bold text-xs">x{item.quantity}</span><span>{item.name}</span></div>
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="w-14 h-14 bg-gray-100 rounded overflow-hidden flex items-center justify-center">
+                                                                    {item.image_url ? (
+                                                                        <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                                                                    ) : (
+                                                                        <div className="text-xs text-gray-400">No image</div>
+                                                                    )}
+                                                                </div>
+                                                                <div>
+                                                                    <div className="flex items-center gap-2"><span className="bg-white px-2 py-0.5 rounded border font-bold text-xs">x{item.quantity}</span><span className="font-semibold">{item.name}</span></div>
+                                                                    {item.description && <div className="text-xs text-gray-500">{item.description}</div>}
+                                                                </div>
+                                                            </div>
                                                             <span className="font-mono text-gray-600">₱{(item.price * item.quantity).toFixed(2)}</span>
                                                         </div>
                                                     ))}

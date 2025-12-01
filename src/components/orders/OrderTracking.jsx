@@ -22,12 +22,34 @@ export const OrderTracking = ({ order, setPage, user }) => {
 
       const bucketsToTry = ['food-images', 'restaurant-images'];
 
+      // Pre-fetch `image_url` from `food_items` for items that only have `food_item_id`
+      const idsToFetch = [...new Set(items
+        .filter(it => !(it.image_url || it.food_items?.image_url || it.image) && it.food_item_id)
+        .map(it => it.food_item_id)
+      )];
+      let fetchedMap = {};
+      if (idsToFetch.length) {
+        try {
+          const { data: foods, error } = await supabase
+            .from('food_items')
+            .select('food_item_id, image_url')
+            .in('food_item_id', idsToFetch);
+          if (foods && !error) {
+            foods.forEach(f => { if (f?.food_item_id) fetchedMap[f.food_item_id] = f.image_url; });
+          }
+        } catch (e) {
+          // ignore and continue; we'll try storage buckets below
+        }
+      }
+
       const updated = await Promise.all(items.map(async (i) => {
         // already resolved
         if (i.image_url && typeof i.image_url === 'string' && i.image_url.length) return i;
 
         // try several possible fields/shapes for image references
         let raw = i.food_items?.image_url ?? i.image_url ?? i.image ?? i.food_items?.image ?? null;
+        // if we didn't find raw from the item payload, try the fetched food_items table
+        if (!raw && i.food_item_id) raw = fetchedMap[i.food_item_id] ?? null;
         if (!raw) return i;
 
         // If it's an object with common keys, extract the string path/url

@@ -1,6 +1,7 @@
 // components/owner/RestaurantOwnerDashboard.jsx - FINAL FIXED VERSION
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../../config/supabase';
+import './RestaurantOwnerDashboard.css';
 
 // --- CONSTANTS ---
 const ORANGE = '#FF8A00'; 
@@ -624,7 +625,8 @@ const RestaurantOwnerDashboard = () => {
         if (status === 'Driver Assigned' || status === 'Out for Delivery') { color = '#3B82F6'; bg = '#DBEAFE'; } // Blue
         if (status === 'Delivered' || status === 'Completed') { color = '#10B981'; bg = '#D1FAE5'; } // Green
         if (status === 'Cancelled') { color = '#EF4444'; bg = '#FEE2E2'; } // Red
-        return <span className="px-3 py-1 rounded-full text-xs font-bold" style={{ color, backgroundColor: bg }}>{status}</span>;
+        const pulse = status === 'Pending' ? 'rod-badge-pulse' : '';
+        return <span className={`px-3 py-1 rounded-full text-xs font-bold ${pulse}`} style={{ color, backgroundColor: bg }}>{status}</span>;
     };
 
     // FIXED: Updated flow
@@ -657,7 +659,7 @@ const RestaurantOwnerDashboard = () => {
     }
 
     return (
-        <div className="min-h-screen" style={{ backgroundColor: LIGHT_BG }}>
+        <div className="min-h-screen rod-dashboard" style={{ backgroundColor: LIGHT_BG }}>
             <header className="shadow-lg p-4 sticky top-0 z-20" style={{ backgroundColor: NAVY }}>
                 <div className="max-w-7xl mx-auto flex justify-between items-center text-white">
                     <div className="flex items-center gap-4">
@@ -672,8 +674,8 @@ const RestaurantOwnerDashboard = () => {
                         </div>
                     </div>
                     <div className="flex items-center gap-3">
-                        <button onClick={() => setShowRestaurantModal(true)} className="px-3 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-sm font-bold">Edit</button>
-                        <button onClick={handleSignOut} className="px-4 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-sm font-bold">Logout</button>
+                        <button onClick={() => setShowRestaurantModal(true)} className="px-3 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-sm font-bold rod-btn">Edit</button>
+                        <button onClick={handleSignOut} className="px-4 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-sm font-bold rod-btn">Logout</button>
                     </div>
                 </div>
             </header>
@@ -743,7 +745,7 @@ const RestaurantOwnerDashboard = () => {
                         ) : (
                             <div className="space-y-4">
                                 {filteredOrders.map(order => (
-                                    <div key={order.id} className="bg-white rounded-xl shadow-md overflow-hidden border-l-4" style={{ borderLeftColor: order.status === 'Completed' || order.status === 'Delivered' ? '#10B981' : ORANGE }}>
+                                    <div key={order.id} className="bg-white rounded-xl shadow-md overflow-hidden border-l-4 rod-card" style={{ borderLeftColor: order.status === 'Completed' || order.status === 'Delivered' ? '#10B981' : ORANGE }}>
                                         <div className="p-5">
                                             <div className="flex justify-between items-start mb-4 pb-3 border-b border-gray-100">
                                                 <div>
@@ -767,7 +769,7 @@ const RestaurantOwnerDashboard = () => {
                                                 </div>
                                             </div>
 
-                                            <button onClick={() => setExpandedOrder(expandedOrder === order.id ? null : order.id)} className="w-full text-left bg-gray-50 p-3 rounded-lg flex justify-between items-center hover:bg-gray-100 transition">
+                                            <button aria-expanded={expandedOrder === order.id} onClick={() => setExpandedOrder(expandedOrder === order.id ? null : order.id)} className="w-full text-left bg-gray-50 p-3 rounded-lg flex justify-between items-center hover:bg-gray-100 transition rod-toggle">
                                                 <span className="font-bold text-sm text-gray-700">View Items ({order.order_items.length})</span>
                                                 <span className="text-gray-400">{expandedOrder === order.id ? '▲' : '▼'}</span>
                                             </button>
@@ -786,10 +788,10 @@ const RestaurantOwnerDashboard = () => {
                                             {order.status !== 'Completed' && order.status !== 'Cancelled' && (
                                                 <div className="mt-5 flex gap-3">
                                                     {getNextStatus(order.status) && (
-                                                        <button onClick={() => updateOrderStatus(order.id, getNextStatus(order.status))} className="flex-1 py-3 text-white rounded-lg font-bold hover:opacity-90 transition shadow-lg" style={{ backgroundColor: ORANGE }}>
-                                                            Mark as {getNextStatus(order.status)}
-                                                        </button>
-                                                    )}
+                                                            <button onClick={() => updateOrderStatus(order.id, getNextStatus(order.status))} className="flex-1 py-3 text-white rounded-lg font-bold hover:opacity-90 transition shadow-lg rod-action-btn" style={{ backgroundColor: ORANGE }}>
+                                                                Mark as {getNextStatus(order.status)}
+                                                            </button>
+                                                        )}
                                                     {(order.status === 'Pending' || order.status === 'Preparing') && ( 
                                                         <button onClick={() => updateOrderStatus(order.id, 'Cancelled')} className="px-4 py-3 bg-red-100 text-red-600 rounded-lg font-bold hover:bg-red-200">Cancel Order</button>
                                                     )}
@@ -814,7 +816,7 @@ const RestaurantOwnerDashboard = () => {
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {products.map(product => (
-                                    <div key={product.food_item_id} className="bg-white rounded-xl shadow-md overflow-hidden">
+                                    <div key={product.food_item_id} className="bg-white rounded-xl shadow-md overflow-hidden rod-card">
                                         {product.image_url && <img src={product.image_url} alt={product.name} className="w-full h-48 object-cover" />}
                                         <div className="p-4">
                                             <h3 className="font-bold text-lg mb-2">{product.name}</h3>

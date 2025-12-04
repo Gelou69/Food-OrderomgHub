@@ -163,7 +163,11 @@ export const Checkout = ({ setPage, cart, setCart, user }) => {
             <span className='text-xl mr-2'>🏠</span>Delivery Details
           </h3>
           
-          <AddressMapPreview />
+        <AddressMapPreview 
+  barangay={address.barangay} 
+  addressDetail={address.addressDetail}
+/>
+
           <div className='space-y-3'>
             <StyledInput
               placeholder="Recipient Name"

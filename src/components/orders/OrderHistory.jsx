@@ -210,7 +210,7 @@ export const OrderHistory = ({ setPage, user, setSelectedOrder }) => {
               </div>
             </div>
           </div>
-        ))}
+        )})}
       </div>
     </div>
   );

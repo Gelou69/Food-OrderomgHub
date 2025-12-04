@@ -424,3 +424,4 @@ export const Checkout = ({ setPage, cart, setCart, user }) => {
     </div>
   );
 };
+export default Checkout;

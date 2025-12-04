@@ -141,3 +141,4 @@ export const AddressMapPreview = ({
     </div>
   );
 };
+export default AddressMapPreview;

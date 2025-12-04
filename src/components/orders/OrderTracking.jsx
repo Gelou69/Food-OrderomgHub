@@ -1,295 +1,156 @@
-// components/orders/OrderTracking.jsx
-import React, { useState, useEffect } from 'react';
-import { supabase } from '../../config/supabase';
-import { ORANGE, NAVY, BORDER, ORDER_STATUSES } from '../../config/constants';
-import { FoodButton } from '../common/FoodButton';
-import { StatusPill } from '../common/StatusPill';
-import { MockMap } from './MockMap';
+// OrderTracking.jsx
+import React, { useState } from 'react';
+import { ShopeeButton } from './App'; // Assuming App.js exports utility components
+import { ORDER_STATUSES } from './App'; // Assuming App.js exports the status array
 
-export const OrderTracking = ({ order, setPage, user }) => {
-  const [currentOrder, setCurrentOrder] = useState(order);
-  const [restaurantDetails, setRestaurantDetails] = useState({
-    name: currentOrder.restaurantName || 'Loading...',
-    address: 'Locating restaurant...',
-  });
+// Destructure colors for local use. Assuming App.js passes them or they are imported.
+const ORANGE = 'var(--shopee-orange)';
+const NAVY = 'var(--shopee-navy)';
+const BORDER = 'var(--shopee-border)';
+const GRAY_TEXT = 'var(--shopee-gray-text)';
 
-  // Attach resolved image URLs to order items (once on mount or when `order` prop changes)
-  useEffect(() => {
-    let mounted = true;
-    const attachImagesToItems = async () => {
-      const items = (order?.order_items) || (currentOrder.order_items) || [];
-      if (!items.length) return;
-
-      const bucketsToTry = ['food-images', 'restaurant-images'];
-
-      // Pre-fetch `image_url` from `food_items` for items that only have `food_item_id`
-      const idsToFetch = [...new Set(items
-        .filter(it => !(it.image_url || it.food_items?.image_url || it.image) && it.food_item_id)
-        .map(it => it.food_item_id)
-      )];
-      let fetchedMap = {};
-      if (idsToFetch.length) {
-        try {
-          const { data: foods, error } = await supabase
-            .from('food_items')
-            .select('food_item_id, image_url')
-            .in('food_item_id', idsToFetch);
-          if (foods && !error) {
-            foods.forEach(f => { if (f?.food_item_id) fetchedMap[f.food_item_id] = f.image_url; });
-          }
-        } catch (e) {
-          // ignore and continue; we'll try storage buckets below
-        }
-      }
-
-      const updated = await Promise.all(items.map(async (i) => {
-        // already resolved
-        if (i.image_url && typeof i.image_url === 'string' && i.image_url.length) return i;
-
-        // try several possible fields/shapes for image references
-        let raw = i.food_items?.image_url ?? i.image_url ?? i.image ?? i.food_items?.image ?? null;
-        // if we didn't find raw from the item payload, try the fetched food_items table
-        if (!raw && i.food_item_id) raw = fetchedMap[i.food_item_id] ?? null;
-        if (!raw) return i;
-
-        // If it's an object with common keys, extract the string path/url
-        if (typeof raw === 'object') {
-          raw = raw.url || raw.path || raw.publicUrl || raw.public_url || raw.publicURL || null;
-        }
-
-        if (!raw) return i;
-        raw = String(raw).trim();
-
-        // If it's already a full URL or data URI, use it directly
-        if (/^https?:\/\//i.test(raw) || raw.startsWith('data:')) return { ...i, image_url: raw };
-
-        // Normalize path (remove leading slashes)
-        raw = raw.replace(/^\/+/, '');
-
-        for (const bucket of bucketsToTry) {
-          try {
-            const { data } = supabase.storage.from(bucket).getPublicUrl(raw);
-            // supabase client may return different casing, accept common variations
-            const publicUrl = data?.publicUrl || data?.publicURL || data?.public_url || data?.url;
-            if (publicUrl) return { ...i, image_url: publicUrl };
-          } catch (e) {
-            // try next bucket
-          }
-        }
-
-        return i;
-      }));
-
-      if (mounted) {
-        setCurrentOrder(prev => {
-          const prevItems = prev?.order_items || [];
-          // avoid unnecessary state updates
-          try {
-            if (JSON.stringify(prevItems) === JSON.stringify(updated)) return prev;
-          } catch (e) {}
-          return { ...prev, order_items: updated };
-        });
-      }
+// Status Indicator Component (reused from App.js)
+const StatusPill = ({ status }) => {
+    const statusColors = {
+        'To Ship': { bg: '#FFECEC', text: ORANGE },
+        'Shipped': { bg: '#FFF5E0', text: '#FF9900' },
+        'To Receive': { bg: '#E6F7FF', text: '#00BFFF' },
+        'Completed': { bg: '#E6FFFA', text: '#00C46A' },
+        'Cancelled': { bg: '#F5F5F5', text: GRAY_TEXT },
     };
-
-    attachImagesToItems();
-    return () => { mounted = false; };
-  }, [order, currentOrder.order_items]);
-  
-  // Logic helpers
-  const isCompleted = currentOrder.status === 'Delivered' || currentOrder.status === 'Completed';
-  const isReceiving = ORDER_STATUSES.indexOf(currentOrder.status) === ORDER_STATUSES.indexOf('Delivered');
-  const isCancellable = ORDER_STATUSES.indexOf(currentOrder.status) <= ORDER_STATUSES.indexOf('Preparing');
-
-  // 1. ROBUST ADDRESS FETCHING LOGIC
-  useEffect(() => {
-    const getRestaurantInfo = async () => {
-      // Step A: identify the restaurant ID and potential nested data from the first item
-      const firstItem = currentOrder.order_items?.[0];
-      const foodItem = firstItem?.food_items;
-      const nestedRestaurant = foodItem?.restaurants;
-      const restaurantId = foodItem?.restaurant_id;
-
-      // variable to hold what we find
-      let name = nestedRestaurant?.name || currentOrder.restaurantName;
-      let addressStreet = nestedRestaurant?.address_street;
-      let addressBarangay = nestedRestaurant?.address_barangay;
-
-      // Step B: If we are missing address data in the props, fetch it from Supabase
-      if (restaurantId && (!addressBarangay || !name)) {
-        console.log("Fetching missing restaurant details...");
-        const { data, error } = await supabase
-          .from('restaurants')
-          .select('name, address_street, address_barangay')
-          .eq('id', restaurantId)
-          .single();
-
-        if (data && !error) {
-          name = data.name;
-          addressStreet = data.address_street;
-          addressBarangay = data.address_barangay;
-        }
-      }
-
-      // Step C: Format the address
-      const formattedAddress = [
-        addressStreet, 
-        addressBarangay, 
-        'Iligan City'
-      ].filter(Boolean).join(', ');
-
-      setRestaurantDetails({
-        name: name || 'Unknown Restaurant',
-        address: formattedAddress || 'Address not available'
-      });
-    };
-
-    getRestaurantInfo();
-  }, [currentOrder]); 
-
-  // 2. STATUS UPDATE LOGIC
-  const handleUpdateStatus = async (newStatus) => {
-    const allowedUserUpdates = ['Cancelled', 'Completed'];
-    
-    // Safety check for demo purposes
-    if (!allowedUserUpdates.includes(newStatus) && newStatus !== ORDER_STATUSES[ORDER_STATUSES.indexOf(currentOrder.status) + 1]) {
-      console.warn(`User status update to ${newStatus} is not allowed.`);
-    }
-
-    try {
-      const { error } = await supabase
-        .from('orders')
-        .update({ status: newStatus })
-        .eq('id', currentOrder.id)
-        .eq('user_id', user.id);
-        
-      if (error) throw error;
-      
-      setCurrentOrder(prev => ({...prev, status: newStatus}));
-
-    } catch(e) {
-      console.error("Error updating status:", e);
-    }
-  };
-  
-  return (
-    <div className="p-4 md:p-6 mx-auto w-full max-w-3xl">
-      {/* HEADER */}
-      <div className="flex justify-between items-center mb-4 border-b pb-4" style={{borderColor: BORDER}}>
-        <h2 className="text-2xl font-bold" style={{ color: NAVY }}>Order Tracking</h2>
-        <button onClick={() => setPage('history')} className="text-base font-bold flex items-center hover:underline transition-all" style={{ color: ORANGE }}>
-          <span className='mr-1'>←</span> Back
-        </button>
-      </div>
-      
-      {/* RESTAURANT INFO CARD */}
-      <div className="mb-4 p-4 bg-white rounded-xl shadow-sm border border-l-4" style={{borderColor: BORDER, borderLeftColor: ORANGE}}>
-        <div className="flex justify-between items-start">
-            <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Order From</p>
-                <h3 className="text-xl font-extrabold leading-tight" style={{ color: NAVY }}>
-                    {restaurantDetails.name}
-                </h3>
-                <div className="flex items-start mt-2">
-                    <span className="text-lg mr-1">📍</span>
-                    <p className="text-sm text-gray-600 font-medium">
-                        {restaurantDetails.address}
-                    </p>
-                </div>
-            </div>
-            <StatusPill status={currentOrder.status} />
-        </div>
-      </div>
-
-      {/* MAP & ACTIONS */}
-      <div className='mb-6 p-4 bg-white rounded-xl shadow-md'>
-        <div className="flex justify-between items-center mb-4">
-          <p className="font-medium text-sm text-gray-600">Order ID: <span className="font-mono bg-gray-100 px-2 py-1 rounded">#{currentOrder.id.slice(-6)}</span></p>
-        </div>
-        
-        <MockMap currentOrder={currentOrder} />
-        
-        <div className="mt-6 space-y-3">
-          {isReceiving && (
-            <FoodButton onClick={() => handleUpdateStatus('Completed')}>
-              CONFIRM ORDER RECEIVED
-            </FoodButton>
-          )}
-          
-          {isCancellable && (
-            <FoodButton onClick={() => handleUpdateStatus('Cancelled')} variant="secondary">
-              Cancel Order
-            </FoodButton>
-          )}
-
-          {/* DEMO BUTTON: Simulate status change by restaurant/rider */}
-          {(!isCompleted && 
-          !isCancellable && 
-          currentOrder.status !== 'Cancelled' &&
-          ORDER_STATUSES.indexOf(currentOrder.status) < ORDER_STATUSES.length - 2) && (
-            <button
-              onClick={() => handleUpdateStatus(ORDER_STATUSES[ORDER_STATUSES.indexOf(currentOrder.status) + 1])}
-              className="w-full text-center text-xs py-2 border border-dashed rounded-lg font-bold opacity-60 hover:opacity-100 transition-opacity"
-              style={{color: NAVY, borderColor: NAVY}}
-            >
-              (Demo) Advance Status to: {ORDER_STATUSES[ORDER_STATUSES.indexOf(currentOrder.status) + 1]}
-            </button>
-          )}
-        </div>
-      </div>
-      
-      {/* ITEMS LIST */}
-      <div className="p-4 bg-white rounded-xl shadow-md mb-4">
-        <h3 className="font-bold text-lg mb-3 border-b pb-2" style={{ color: NAVY }}>Items Ordered</h3>
-        <div className="space-y-3">
-            {currentOrder.order_items.map((item, index) => (
-            <div key={item.food_item_id || index} className="flex justify-between text-gray-700 items-center">
-              <div className='flex items-center gap-3'>
-                <div className="w-14 h-14 bg-gray-100 rounded overflow-hidden flex items-center justify-center">
-                  {item.image_url ? (
-                    <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="text-xs text-gray-400">No image</div>
-                  )}
-                </div>
-                <div>
-                  <div className='flex items-center gap-2'>
-                  <span className='font-bold text-gray-900 border px-2 py-0.5 rounded text-sm'>x{item.quantity}</span>
-                  <p className="text-base font-medium">{item.name}</p>
-                  </div>
-                  {item.description && <div className="text-xs text-gray-500">{item.description}</div>}
-                </div>
-              </div>
-              <p className="font-semibold text-base">₱{(item.price * item.quantity).toFixed(2)}</p>
-            </div>
-            ))}
-        </div>
-        
-        <div className="border-t mt-4 pt-4">
-             <div className="flex justify-between items-center">
-                <span className="font-bold text-gray-800">TOTAL</span>
-                <span className="text-xl font-extrabold" style={{ color: ORANGE }}>₱{(currentOrder.total + 50).toFixed(2)}</span>
-            </div>
-             <p className='text-xs text-right text-gray-400 mt-1'>Includes delivery fee</p>
-        </div>
-      </div>
-
-      {/* DELIVERY DETAILS */}
-      <div className="p-4 bg-white rounded-xl shadow-md text-sm">
-        <h3 className="font-bold text-lg mb-3 flex items-center gap-2" style={{ color: NAVY }}>
-          <span>🏠</span> Delivery Destination
-        </h3>
-        <div className="pl-1 space-y-2">
-            <div>
-                <p className="text-xs text-gray-400 uppercase font-bold">Recipient</p>
-                <p className='text-gray-800 font-medium'>{currentOrder.contact_name} ({currentOrder.contact_phone})</p>
-            </div>
-            <div>
-                <p className="text-xs text-gray-400 uppercase font-bold">Address</p>
-                <p className="text-gray-800 font-medium">{currentOrder.shipping_address}</p>
-            </div>
-        </div>
-      </div>
-    </div>
-  );
+    const color = statusColors[status] || statusColors['To Ship'];
+    return (
+        <span className="text-sm font-bold px-3 py-1 rounded-full" 
+            style={{ backgroundColor: color.bg, color: color.text }}>
+            {status}
+        </span>
+    );
 };
+
+// Mock Google Map for tracking (reused from App.js)
+const MockMap = ({ currentOrder }) => {
+    const isCompleted = currentOrder.status === 'Completed';
+    const isShipped = ORDER_STATUSES.indexOf(currentOrder.status) >= ORDER_STATUSES.indexOf('Shipped');
+
+    const trackingText = isCompleted 
+        ? "Order Delivered Successfully!" 
+        : isShipped 
+            ? "Tracking: Package en route to your location."
+            : "Pending Shipment: Awaiting seller processing.";
+
+    return (
+        <div className="mt-4 p-4 border rounded-xl bg-white shadow-inner">
+            <h4 className="font-bold mb-2 text-lg" style={{ color: NAVY }}>Tracking Status</h4>
+            <div className="relative">
+                {/* Placeholder for map/image */}
+                <div className="h-28 bg-gray-100 rounded-t-lg flex items-center justify-center">
+                    <span className="text-gray-400">Map View Placeholder</span>
+                </div>
+                <div className="absolute bottom-0 left-0 right-0 text-center py-2 rounded-b-lg text-white font-bold" 
+                    style={{ backgroundColor: isShipped ? ORANGE : NAVY }}>
+                    {trackingText}
+                </div>
+            </div>
+            <div className="mt-3 text-sm text-gray-600">
+                <p>Courier: J&T Express (Mock)</p>
+                <p>Tracking ID: SHOPEE-MOCK-{currentOrder.id.slice(0, 8).toUpperCase()}</p>
+            </div>
+        </div>
+    );
+};
+
+
+const OrderTracking = ({ order, setPage, user, supabase }) => {
+    const [currentOrder, setCurrentOrder] = useState(order);
+
+    const isCompleted = currentOrder.status === 'Completed';
+    const isReceiving = ORDER_STATUSES.indexOf(currentOrder.status) === ORDER_STATUSES.indexOf('To Receive');
+    const isCancellable = ORDER_STATUSES.indexOf(currentOrder.status) <= ORDER_STATUSES.indexOf('To Ship');
+
+    const handleUpdateStatus = async (newStatus) => {
+        try {
+            const { error } = await supabase
+                .from('orders')
+                .update({ status: newStatus })
+                .eq('id', currentOrder.id)
+                .eq('user_id', user.id);
+            if (error) throw error;
+            
+            setCurrentOrder(prev => ({...prev, status: newStatus}));
+
+        } catch(e) {
+            console.error("Error updating status:", e);
+        }
+    };
+
+    return (
+        <div className="p-4 md:p-6 mx-auto w-full max-w-3xl">
+            <div className="flex justify-between items-center mb-4 border-b pb-4" style={{borderColor: BORDER}}>
+                <h2 className="text-2xl font-bold" style={{ color: NAVY }}>Order Details & Tracking</h2>
+                <button onClick={() => setPage('history')} className="text-base font-bold flex items-center hover:underline" style={{ color: ORANGE }}>
+                    <span className='mr-1'>←</span> All Orders
+                </button>
+            </div>
+
+            <div className='mb-6 p-4 bg-white rounded-xl shadow-md'>
+                <div className="flex justify-between items-center mb-4">
+                    <p className="font-medium text-sm text-gray-600">Order ID: **{currentOrder.id.slice(-8)}**</p>
+                    <StatusPill status={currentOrder.status} />
+                </div>
+                <MockMap currentOrder={currentOrder} />
+                
+                <div className="mt-6 space-y-3">
+                    {/* Action Buttons */}
+                    {isReceiving && (
+                        <ShopeeButton onClick={() => handleUpdateStatus('Completed')}>
+                            CONFIRM ORDER RECEIVED
+                        </ShopeeButton>
+                    )}
+                    {isCancellable && (
+                        <ShopeeButton onClick={() => handleUpdateStatus('Cancelled')} variant="secondary">
+                            Cancel Order
+                        </ShopeeButton>
+                    )}
+
+                    {/* Seller Simulation Button (for demo purposes) */}
+                    {(!isCompleted && 
+                    !isCancellable && ORDER_STATUSES.indexOf(currentOrder.status) < ORDER_STATUSES.length - 2) && (
+                        <button
+                            onClick={() => handleUpdateStatus(ORDER_STATUSES[ORDER_STATUSES.indexOf(currentOrder.status) + 1])}
+                            className="w-full text-center text-sm py-2 border-2 border-dashed rounded-lg font-bold"
+                            style={{color: NAVY, borderColor: NAVY, opacity: 0.7}}
+                            title="Click to simulate seller/courier action"
+                        >
+                            [DEMO] Next Status: {ORDER_STATUSES[ORDER_STATUSES.indexOf(currentOrder.status) + 1]}
+                        </button>
+                    )}
+                </div>
+            </div>
+            
+            {/* Items Summary */}
+            <div className="p-4 bg-white rounded-xl shadow-md mb-4">
+                <h3 className="font-bold text-lg mb-3" style={{ color: NAVY }}>Items Ordered</h3>
+                {currentOrder.order_items.map((item, index) => (
+                    <div key={index} className="flex justify-between border-b last:border-b-0 py-2 text-gray-700">
+                        <p className="text-base font-medium">{item.name} x{item.quantity}</p>
+                        <p className="font-semibold text-base">${(item.price * item.quantity).toFixed(2)}</p>
+                    </div>
+                ))}
+                <p className="text-xl text-black font-extrabold flex justify-between pt-4 mt-2">
+                    <span>FINAL TOTAL:</span>
+                    <span style={{ color: ORANGE }}>${currentOrder.total.toFixed(2)}</span>
+                </p>
+            </div>
+
+            {/* Address */}
+            <div className="p-4 bg-white rounded-xl shadow-md text-sm">
+                <h3 className="font-bold text-lg mb-2" style={{ color: NAVY }}><span className='mr-1'>🏠</span>Delivery Details</h3>
+                <p className='text-gray-700'>**Recipient:** {currentOrder.contact_name}</p>
+                <p className='text-gray-700'>**Phone:** {currentOrder.contact_phone}</p>
+                <p className="text-gray-600 mt-1">**Address:** {currentOrder.shipping_address}</p>
+            </div>
+        </div>
+    );
+};
+
+export default OrderTracking;   

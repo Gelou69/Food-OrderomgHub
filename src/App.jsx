@@ -106,24 +106,14 @@ const App = () => {
       {!hideNavigation && (
         <header className="w-full shadow-lg p-3 z-20 sticky top-0" style={{ backgroundColor: ORANGE }}>
           <div className="flex justify-between items-center w-full max-w-3xl mx-auto"> 
-           <div className="flex items-center space-x-2">
-  {/* Logo Image */}
-  <img 
-    src="/logo-iligan-hub.png"   // <-- change filename if needed
-    alt="Iligan Hub Logo" 
-    className="h-10 w-auto drop-shadow-md"
-  />
-
-  {/* Visible Branding Text */}
-  <span className="text-white font-bold text-lg tracking-wide">
-    Iligan Hub
-  </span>
-</div>
-
+            <div className="flex items-center">
+              <img src="/vite.svg" alt="ILIGAN Food logo" className="h-8" />
+              <span className="sr-only">ILIGAN Food</span>
+            </div>
             
             {user && (
               <div className="flex items-center text-white text-sm">
-                <span className="mr-3 font-semibold hidden sm:inline">Hi,{displayUserId}</span>
+                <span className="mr-3 font-semibold hidden sm:inline">Hi, **{displayUserId}**</span>
                 <button onClick={handleSignOut} className="px-3 py-1 rounded-full bg-white bg-opacity-20 hover:bg-opacity-30 transition-all font-bold">
                   Logout
                 </button>
